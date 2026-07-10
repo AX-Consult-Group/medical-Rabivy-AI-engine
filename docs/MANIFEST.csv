@@ -1,0 +1,12 @@
+path,title,count,chunking,source_type,bytes
+hcp_snapshots/ (folder),Per-HCP monthly account snapshot,15000 docs,chunk_per_document,"Joined vendor feeds keyed to NPI (IQVIA, Komodo, Veeva); one doc per NPI",26645725
+reference/specialty_benchmark_profiles.md,Specialty benchmark profiles,1 doc,chunk_by_section,Derived from master dataset,2710
+reference/state_market_summary.md,State-level market summary,1 doc,chunk_by_section (per state),Derived from master dataset,25817
+rep_field/rabivy_product_benefits_brief.md,Rabivy product & benefits brief,1 doc,chunk_by_section,Brand/medical materials,2635
+rep_field/rep_talking_points_by_segment.md,Rep talking points by segment,1 doc,chunk_by_section,GTM strategy,3256
+rep_field/objection_handling_guide.md,Objection handling guide,1 doc,chunk_by_section,Field enablement,2792
+strategic/payer_access_brief.md,Payer & market access brief,1 doc,chunk_by_section,Market access documentation,3018
+strategic/competitive_intelligence_brief.md,Competitive intelligence brief,1 doc,chunk_by_section,Competitive intelligence,2951
+clinical/rabivy_clinical_summary.md,Rabivy clinical summary,1 doc,chunk_by_section,Clinical / Phase 2 data,2324
+clinical/glp1_class_overview.md,GLP-1 class overview,1 doc,chunk_by_section,Clinical publications,2736
+clinical/real_world_evidence_brief.md,Real-world evidence brief,1 doc,chunk_by_section,Clinical publications / RWE,2437

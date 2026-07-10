@@ -1,0 +1,53 @@
+# HCP Account Snapshot - NPI 1344001929
+
+Data as of: 2026-06-30 \| Reporting period: June 2026
+
+## Identity
+
+- NPI: 1344001929 (primary identifier)
+- Internal ref: HCP0002
+- Specialty: Endocrinology
+- Location: Missouri (Midwest)
+- Years in practice: 12
+- Source: NPPES provider registry; IQVIA OneKey reference
+
+## Rabivy Propensity
+
+- Propensity score: 79/100
+- Tier: High \| National rank: 51 of 15,000
+- Prescriber decile (active GLP-1 writers): 10 of 10
+- Source: AX Pharmaceuticals in-house propensity model (Phase 2)
+
+## GLP-1 Prescribing (June 2026)
+
+- Monthly GLP-1 Rx (all brands): 55
+- New patient starts (NRx): 16 (28% of volume)
+- Estimated obesity prevalence in panel (modeled): 25%
+- Source: IQVIA Xponent / Symphony Health (Rx); modeled panel estimate
+
+## Payer & Access
+
+- Payer mix: Commercial 51% \| Medicare 31% \| Medicaid 11% \| Out-of-pocket 7%
+- Dominant payer: Commercial
+- Formulary status (dominant payer): Preferred (no access friction expected)
+- Prior authorization burden: Low (28%)
+- Source: Komodo Health / Optum claims
+
+## Competitive Landscape
+
+- Current GLP-1 panel mix: Novo Nordisk 53% \| Eli Lilly 33% \| Other 14%
+- Dominant competitor: Novo Nordisk
+- Switching propensity score: 83/100
+- Source: IQVIA / Komodo (brand-level claims); in-house switching model
+
+## AX Pharmaceuticals Relationship & Engagement
+
+- Embedded AX Pharmaceuticals prescriber: two or more portfolio products (incl. Repatha) in the last 24 months.
+- Rep targeting status: On call plan (targeted)
+- Last rep contact: 1 days ago \| Engagement score: 0.97 (strong)
+- Recent sample request: Yes
+- Source: AX Pharmaceuticals Veeva CRM
+
+## Commercial Read
+
+Top-decile Rabivy propensity among active GLP-1 writers. High switching propensity - responsive to a competitive switch approach. Recent sample request signals active interest.
