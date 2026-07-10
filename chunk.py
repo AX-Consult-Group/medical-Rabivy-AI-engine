@@ -1,96 +1,120 @@
 # chunk.py
-# Splits narrative markdown documents into chunks at each "## " heading.
-# Skips repo documentation (READMEs, architecture) and HCP report cards
-# (cards are handled separately because they are chunked whole, not split).
+# -------------------------------------------------------------------
+# Turns the documents in docs/ into chunks, using TWO strategies:
+#   - Narrative docs  -> split into one chunk per "## " section.
+#   - HCP cards       -> ONE chunk for the whole card (never split),
+#                        with NPI / state / specialty pulled out as tags.
+# Repo docs (READMEs, architecture) are skipped.
+# -------------------------------------------------------------------
 
 import glob
 import re
 import os
 import json
 import csv
+from collections import Counter
 
-# --- What to skip -------------------------------------------------------
-# 1. Repo documentation files (describe the project, not knowledge content).
-SKIP_FILENAMES = {
-    "knowledge_repo_README.md",
-    "PRODUCTION_ARCHITECTURE.md",
-}
-# 2. Report cards live in hcp_snapshots/ or are named sample_card / card_NPI.
-#    These get their own whole-file handling in a later step, so skip for now.
-def is_report_card(path):
+# Repo-documentation files to ignore (not knowledge content).
+SKIP_FILENAMES = {"README.md", "knowledge_repo_README.md", "PRODUCTION_ARCHITECTURE.md"}
+
+# A file is an HCP card if it lives in hcp_snapshots/ or is named like a card.
+def is_card(path):
     name = os.path.basename(path).lower()
-    return ("hcp_snapshots" in path) or name.startswith("sample_card") or name.startswith("card_npi")
-# -----------------------------------------------------------------------
+    return ("hcp_snapshots" in path.lower()) or name.startswith("npi_") or name.startswith("sample_card")
+
+# Pull a "- Label: value" line out of a card's text.
+def extract_field(text, label):
+    for line in text.splitlines():
+        s = line.strip()
+        if s.lower().startswith(f"- {label.lower()}:"):
+            return s.split(":", 1)[1].strip()
+    return ""
 
 
-# STEP 1: Find every .md file inside the "docs" folder AND its subfolders.
 all_md_paths = glob.glob("docs/**/*.md", recursive=True)
 
-# Keep only the narrative content docs (drop meta files and cards).
-doc_paths = []
-skipped = []
+all_chunks = []
+n_cards = 0
+n_narrative_docs = 0
+n_skipped = 0
+
 for path in all_md_paths:
     filename = os.path.basename(path)
-    if filename in SKIP_FILENAMES or is_report_card(path):
-        skipped.append(filename)
-    else:
-        doc_paths.append(path)
 
-print(f"Found {len(all_md_paths)} .md files. Chunking {len(doc_paths)}, skipping {len(skipped)}.")
-if skipped:
-    preview = ", ".join(skipped[:5])
-    more = f" ... and {len(skipped) - 5} more" if len(skipped) > 5 else ""
-    print(f"Skipped (meta docs / cards): {preview}{more}")
-print()
-
-
-# STEP 2: Go through each content document and cut it into chunks.
-all_chunks = []
-for path in doc_paths:
-    doc_name = os.path.basename(path).replace(".md", "")
-    doc_type = os.path.basename(os.path.dirname(path))  # the subfolder, e.g. "clinical"
+    if filename in SKIP_FILENAMES:
+        n_skipped += 1
+        continue
 
     with open(path, "r", encoding="utf-8") as f:
         text = f.read()
 
-    sections = re.split(r"\n(?=## )", text)  # split wherever a line starts with "## "
+    if is_card(path):
+        # ---- CARD: one whole chunk, with metadata pulled out ----
+        match = re.search(r"(\d{10})", filename)          # NPIs are 10 digits
+        npi = match.group(1) if match else filename.replace(".md", "")
+        location = extract_field(text, "Location")        # e.g. "Arkansas (South)"
+        state = location.split("(")[0].strip()            # -> "Arkansas"
+        specialty = extract_field(text, "Specialty")      # e.g. "Primary Care"
 
-    for section in sections:
-        section = section.strip()
-        if not section:
-            continue
-        first_line = section.splitlines()[0]
-        if not first_line.startswith("## "):  # keep only real "## " sections
-            continue                          # (skips the doc's title/intro)
-        heading = first_line.replace("#", "").strip()
+        all_chunks.append({
+            "chunk_id": f"card_{npi}",
+            "source_doc": filename.replace(".md", ""),
+            "doc_type": "hcp_card",
+            "npi": npi,
+            "state": state,
+            "specialty": specialty,
+            "heading": f"HCP {npi}",
+            "text": text.strip(),
+        })
+        n_cards += 1
 
-        chunk = {
-            "chunk_id": f"{doc_name}__{heading.lower().replace(' ', '_')}",
-            "source_doc": doc_name,
-            "heading": heading,
-            "text": section,
-            "doc_type": doc_type,
-        }
-        all_chunks.append(chunk)
+    else:
+        # ---- NARRATIVE: split into one chunk per "## " section ----
+        doc_name = filename.replace(".md", "")
+        doc_type = os.path.basename(os.path.dirname(path))
+        n_narrative_docs += 1
 
-print(f"Created {len(all_chunks)} chunks in total.\n")
+        for section in re.split(r"\n(?=## )", text):
+            section = section.strip()
+            if not section:
+                continue
+            first_line = section.splitlines()[0]
+            if not first_line.startswith("## "):
+                continue
+            heading = first_line.replace("#", "").strip()
+            # For the state summary doc, the heading IS the state.
+            state = heading if doc_name == "state_market_summary" else ""
 
+            all_chunks.append({
+                "chunk_id": f"{doc_name}__{heading.lower().replace(' ', '_')}",
+                "source_doc": doc_name,
+                "doc_type": doc_type,
+                "npi": "",
+                "state": state,
+                "specialty": "",
+                "heading": heading,
+                "text": section,
+            })
 
-# STEP 3: Print each chunk so you can see the result.
-for c in all_chunks:
-    word_count = len(c["text"].split())
-    print(f"  - {c['chunk_id']}  ({word_count} words)")
+# ---- Summary (no giant per-chunk list, since there are thousands) ----
+print(f"Narrative docs chunked : {n_narrative_docs}")
+print(f"Cards added (1 each)   : {n_cards}")
+print(f"Meta files skipped     : {n_skipped}")
+print(f"TOTAL chunks           : {len(all_chunks)}")
+print("By doc_type            :", dict(Counter(c["doc_type"] for c in all_chunks)))
 
-
-# STEP 4: Save the chunks to an "output" folder in two formats.
+# ---- Save ----
 os.makedirs("output", exist_ok=True)
-
 with open("output/chunks.json", "w", encoding="utf-8") as f:
     json.dump(all_chunks, f, indent=2)
 
-with open("output/chunks.csv", "w", newline="", encoding="utf-8") as f:
-    writer = csv.DictWriter(f, fieldnames=["chunk_id", "source_doc", "doc_type", "heading", "text"])
-    writer.writeheader()
-    writer.writerows(all_chunks)
+columns = ["chunk_id", "source_doc", "doc_type", "npi", "state", "specialty", "heading", "text"]
+try:
+    with open("output/chunks.csv", "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=columns)
+        writer.writeheader()
+        writer.writerows(all_chunks)
+except PermissionError:
+    print("\n! chunks.csv is open in Excel - close it and re-run.")
 
-print("\nDone. Saved to output/chunks.json and output/chunks.csv")
+print("\nDone. Saved output/chunks.json and output/chunks.csv")
