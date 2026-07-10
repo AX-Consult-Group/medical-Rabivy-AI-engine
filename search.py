@@ -1,54 +1,66 @@
 # search.py
 # -------------------------------------------------------------------
-# Ask a question in plain English; get back the chunks whose MEANING is
-# closest to it. This is the "retrieval" in retrieval-augmented generation.
-# Uses: output/chunks_tagged.json  +  output/embeddings.npy  (from embed.py)
+# Answers a question by ROUTING it to the right retrieval path:
+#   1. Question names an NPI  -> exact card lookup (no fuzzy matching).
+#   2. Question names a state -> semantic search within that state's docs.
+#   3. Otherwise              -> semantic search over the narrative docs.
+# Cards are never returned by fuzzy search (they'd pollute results);
+# they come back only via exact NPI lookup.
 # -------------------------------------------------------------------
 
 import json
+import re
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-# STEP 1: Load the chunks and their embeddings (same row order).
 with open("output/chunks_tagged.json", "r", encoding="utf-8") as f:
     chunks = json.load(f)
 embeddings = np.load("output/embeddings.npy")
-print(f"Loaded {len(chunks)} chunks and their embeddings.\n")
-
-# STEP 2: Load the SAME model used in embed.py (so questions and chunks
-# live in the same "meaning space"). Uses the model already downloaded.
 model = SentenceTransformer("all-MiniLM-L6-v2")
-
-# Pre-normalise the chunk vectors once (needed for cosine similarity).
 chunk_norms = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
 
+# Pre-build a few helpers.
+narrative_idx = [i for i, c in enumerate(chunks) if c["doc_type"] != "hcp_card"]
+card_by_npi = {c["npi"]: i for i, c in enumerate(chunks) if c["doc_type"] == "hcp_card"}
+states = sorted({c["state"] for c in chunks if c["state"] and c["doc_type"] != "hcp_card"})
 
-# STEP 3: The search function.
-def search(question, top_k=3):
-    # Turn the question into a vector with the same model.
+def _semantic(question, pool, top_k):
     q = model.encode([question])[0]
     q = q / np.linalg.norm(q)
-    # Cosine similarity: how aligned each chunk is with the question (1 = identical meaning).
-    scores = chunk_norms @ q
-    # Indices of the highest-scoring chunks, best first.
-    top_idx = np.argsort(scores)[::-1][:top_k]
-    return [(chunks[i], float(scores[i])) for i in top_idx]
+    scores = chunk_norms[pool] @ q
+    order = np.argsort(scores)[::-1][:top_k]
+    return [(chunks[pool[o]], float(scores[o])) for o in order]
+
+def search(question, top_k=3):
+    # PATH 1: exact NPI lookup
+    m = re.search(r"\b(\d{10})\b", question)
+    if m and m.group(1) in card_by_npi:
+        i = card_by_npi[m.group(1)]
+        return "card lookup (NPI)", [(chunks[i], 1.0)]
+
+    # PATH 2: state filter (over narrative docs)
+    ql = question.lower()
+    picked = next((s for s in states if s.lower() in ql), None)
+    if picked:
+        pool = [i for i in narrative_idx if chunks[i]["state"] == picked]
+        if pool:
+            return f"state filter ({picked})", _semantic(question, pool, top_k)
+
+    # PATH 3: general semantic search over narrative docs
+    return "semantic (narrative)", _semantic(question, narrative_idx, top_k)
 
 
-# STEP 4: Try a few questions and print the best-matching chunks.
+# --- Try a few questions, showing which path each took ---
 questions = [
-    "How is Rabivy different from Zepbound?",
-    "A doctor says they are already happy with Ozempic - what do I say?",
+    "Tell me about the HCP with NPI 1000008396",
     "What does the GLP-1 market look like in Missouri?",
+    "How is Rabivy different from Zepbound?",
 ]
-
 for question in questions:
+    route, results = search(question, top_k=3)
     print("=" * 72)
-    print("Q:", question)
-    for chunk, score in search(question):
-        print(f"  [{score:.3f}]  {chunk['chunk_id']}")
-        print(f"           doc_type={chunk['doc_type']}  state={chunk['state']!r}  competitor={chunk['competitor']!r}")
+    print(f"Q: {question}")
+    print(f"   route -> {route}")
+    for chunk, score in results:
+        print(f"   [{score:.3f}] {chunk['chunk_id']}  ({chunk['doc_type']})")
     print()
-
-print("=" * 72)
-print("Tip: change the questions above, or call search('your question') yourself.")
