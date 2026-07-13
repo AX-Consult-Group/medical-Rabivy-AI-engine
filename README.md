@@ -17,7 +17,7 @@ Rabivy and AX Pharmaceuticals are fictional and were created solely for the purp
 |---|---|---|
 | 1 | GTM Strategy | Complete |
 | 2 | Propensity Model | Complete (synthetic data) |
-| 3 | Knowledge Repository | Not started |
+| 3 | Knowledge Repository | Simulated |
 | 4 | Retrieval Layer (RAG) | Not started |
 | 5 | AI Evaluation Layer | Not started |
 | 6 | Conversational Interface | Not started |
