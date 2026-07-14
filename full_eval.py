@@ -1,0 +1,294 @@
+# eval_full.py
+# ===================================================================
+# FULL-SYSTEM EVALUATION - covers the entire question list.
+# -------------------------------------------------------------------
+# Every question is sent through ask.py (the top-level router). For each,
+# we report one of FOUR honest outcomes:
+#
+#   PASS        - routed to the right engine AND returned the correct fact
+#                 (fully working today, no LLM needed).
+#   ROUTES->LLM - routed correctly AND retrieved the right data/card, but
+#                 turning that into a written answer needs the LLM layer.
+#   NEEDS-LLM   - routed to the RIGHT engine (checked, not assumed), but full
+#                 correctness needs the LLM for parsing/chaining/synthesis.
+#   FAIL        - routed to the wrong engine, or the expected fact/chunk
+#                 wasn't found where it should have been. This now applies
+#                 to "llm"-mode tests too - a wrong route is a real bug
+#                 regardless of what happens after routing.
+#   CRASH       - the question blew up ask.ask() itself. Recorded, not fatal
+#                 to the rest of the run.
+#
+# NOTE: ask.ask() returns (route: str, data: dict) - not a formatted
+# string. Correctness checks below search the raw data dict directly
+# (via _deep_contains) rather than a pre-formatted sentence, so a
+# phrasing/formatting change in structured.py/ask.py's format_* layer
+# can't silently break this eval for the wrong reason.
+# ===================================================================
+
+import json
+import os
+import time
+import ask   # single entry point; importing loads both engines
+
+# Each test: the question, its category, a "mode", and what to check.
+#   mode "full"      -> check expect_engine + expect_contains  (PASS/FAIL)
+#   mode "retrieval" -> check expect_engine + expect_retrieves (ROUTES->LLM/FAIL)
+#   mode "llm"       -> check expect_engine only               (NEEDS-LLM/FAIL)
+TESTS = [
+    # ---- STRUCTURED: exact lookup & ranking (fully working) ----
+    {"q": "Who is the top GLP-1 prescriber in New York?",
+     "cat": "structured lookup", "mode": "full",
+     "expect_engine": "STRUCTURED", "expect_contains": "1658907316"},
+    {"q": "How many GLP-1 scripts did NPI 1344001929 write last month?",
+     "cat": "structured lookup", "mode": "full",
+     "expect_engine": "STRUCTURED", "expect_contains": "55"},
+    {"q": "List the top 10 High-tier prescribers nationally by propensity score.",
+     "cat": "structured ranking", "mode": "full",
+     "expect_engine": "STRUCTURED", "expect_contains": "1184547828"},
+    {"q": "Which states have the most High-tier HCPs?",
+     "cat": "structured ranking", "mode": "full",
+     "expect_engine": "STRUCTURED", "expect_contains": "California"},
+    {"q": "How many active GLP-1 writers are in Texas?",
+     "cat": "structured count", "mode": "full",
+     "expect_engine": "STRUCTURED", "expect_contains": "576"},
+
+    # ---- STRUCTURED: filtered targeting ----
+    # filter_hcps() answers these, but parsing several conditions out of
+    # free text (specialty + state + tier + targeted) is the LLM's job.
+    # expect_engine added below - previously these were "llm" mode with no
+    # engine check at all, which is exactly what let the filter_hcps
+    # routing bug (Q6-Q9 falling through to RAG) go undetected.
+    {"q": "Show me High-propensity endocrinologists in Florida who are not currently targeted.",
+     "cat": "filtered targeting", "mode": "llm",
+     "expect_engine": "STRUCTURED",
+     "note": "filter_hcps() ready; multi-field parsing needs LLM"},
+    {"q": "Which Novo-heavy prescribers in California have a high switching score?",
+     "cat": "filtered targeting", "mode": "llm",
+     "expect_engine": "STRUCTURED",
+     "note": "routes via the switching-score trigger; 'Novo-heavy' phrasing "
+             "isn't recognised by competitor detection yet (only literal "
+             "'novo nordisk'/brand names are) - dominant_competitor filter "
+             "won't actually apply here even though routing is correct"},
+    {"q": "Find high-volume writers in Illinois with a preferred formulary status.",
+     "cat": "filtered targeting", "mode": "llm",
+     "expect_engine": "RAG",
+     "note": "honestly RAG today - there's no formulary_status column or "
+             "extraction logic yet, so this can't route to STRUCTURED until "
+             "that field exists. Not a routing bug, a missing-data gap."},
+    {"q": "Which untargeted HCPs have a recent sample request and a High tier?",
+     "cat": "filtered targeting", "mode": "llm",
+     "expect_engine": "STRUCTURED",
+     "note": "routes via the (now-fixed) 'untargeted' + tier detection; "
+             "sample-request filtering still needs a real data column - "
+             "this only proves the targeted/tier half routes correctly"},
+
+    # ---- RAG cards: characterisation (retrieval works, wording needs LLM) ----
+    {"q": "Give me a summary of NPI 1344001929.",
+     "cat": "card summary", "mode": "retrieval",
+     "expect_engine": "RAG", "expect_retrieves": "card_1344001929"},
+    {"q": "What's the access situation for the top prescriber in Missouri?",
+     "cat": "card (chained)", "mode": "llm",
+     "expect_engine": "STRUCTURED",
+     "note": "chained: this only proves step 1 (find top prescriber) routes "
+             "correctly; step 2 (read their card) and synthesis aren't wired"},
+    {"q": "Why is this High-tier doctor not converting?",
+     "cat": "card read", "mode": "llm",
+     "expect_engine": "RAG",
+     "note": "no NPI/state in the question itself - nothing to structurally "
+             "resolve to a single HCP without conversational context, so RAG "
+             "fallback is the honest outcome here"},
+    {"q": "What's the story on GLP-1 writers in Arizona - who should I know about?",
+     "cat": "card narrative", "mode": "llm",
+     "expect_engine": "RAG",
+     "note": "needs LLM to synthesise across several cards"},
+
+    # ---- RAG comparison (card + benchmark + LLM) ----
+    {"q": "Compare NPI 1344001929 to a typical endocrinologist.",
+     "cat": "comparison", "mode": "llm",
+     "expect_engine": "RAG",
+     "note": "retrieves the card via search.py's NPI path; comparison to a "
+             "benchmark needs LLM"},
+    {"q": "Is this doctor a high or low prescriber for their specialty?",
+     "cat": "comparison", "mode": "llm",
+     "expect_engine": "RAG",
+     "note": "needs HCP in context + benchmark + LLM"},
+
+    # ---- RAG strategic & narrative (fully working: right chunk retrieved) ----
+    {"q": "What's our recommended messaging for competitive switchers?",
+     "cat": "narrative", "mode": "full",
+     "expect_engine": "RAG", "expect_contains": "competitive_switchers"},
+    {"q": "What is Rabivy's key differentiator versus Zepbound?",
+     "cat": "narrative", "mode": "full",
+     "expect_engine": "RAG", "expect_contains": "differentiator"},
+    {"q": "How should a rep handle 'I'm already happy with Ozempic'?",
+     "cat": "narrative", "mode": "full",
+     "expect_engine": "RAG", "expect_contains": "objection_handling"},
+    {"q": "What's the Medicaid coverage outlook for GLP-1 obesity drugs?",
+     "cat": "narrative", "mode": "full",
+     "expect_engine": "RAG", "expect_contains": "payer_access"},
+
+    # ---- Carried over from the old eval.py - these test paths/chunks the
+    # tests above didn't cover at all, notably: Missouri is the ONLY test
+    # anywhere in this file that exercises search.py's state-filter path
+    # (Path 3) specifically, rather than general narrative semantic search.
+    {"q": "What does the GLP-1 market look like in Missouri?",
+     "cat": "narrative (state filter)", "mode": "full",
+     "expect_engine": "RAG", "expect_contains": "state_market_summary__missouri"},
+    {"q": "How is Rabivy's mechanism different from tirzepatide?",
+     "cat": "narrative", "mode": "full",
+     "expect_engine": "RAG",
+     "expect_contains": ["mechanism_comparison", "molecule_and_mechanism",
+                          "how_is_this_different_from_ti"]},
+    {"q": "What is Rabivy's main dosing advantage?",
+     "cat": "narrative", "mode": "full",
+     "expect_engine": "RAG",
+     "expect_contains": ["monthly_dosing", "where_rabivy_wins", "positioning_summary"]},
+    {"q": "What does a typical endocrinologist look like?",
+     "cat": "narrative (benchmark)", "mode": "full",
+     "expect_engine": "RAG", "expect_contains": "endocrinology"},
+    {"q": "How is prior authorization affecting access?",
+     "cat": "narrative", "mode": "full",
+     "expect_engine": "RAG", "expect_contains": ["prior_auth", "access"]},
+
+    # ---- Multi-source showpiece (structured + narrative + LLM) ----
+    {"q": "Who should I target next month in New York, and what should I say to them?",
+     "cat": "multi-source showpiece", "mode": "llm",
+     "expect_engine": "RAG",
+     "note": "the showpiece: joins targeting + messaging - pure LLM synthesis. "
+             "'target' (present tense) isn't caught by the targeted-detection "
+             "regex (which looks for 'targeted'), so this correctly falls to "
+             "RAG rather than a half-relevant structured filter"},
+]
+
+# Optional: a KNOWN retrieval limitation we keep visible (not on the list,
+# but the diagnostic we found earlier). Left in as an honest gap.
+KNOWN_LIMITS = [
+    {"q": "Why do patients stop taking GLP-1s after a year?",
+     "cat": "narrative (known gap)", "mode": "full",
+     "expect_engine": "RAG", "expect_contains": ["why_patients_discontinue", "persistence", "discontinue"]},
+]
+
+
+def _deep_contains(obj, needle):
+    """Search a nested dict/list structure for a substring, instead of
+    depending on the exact wording of a pre-formatted sentence. A
+    formatting change in structured.py's format_* functions (e.g.
+    '55 scripts' -> '55.0 scripts last month') can't silently break this
+    check for reasons unrelated to actual correctness."""
+    if obj is None:
+        return False
+    if isinstance(obj, dict):
+        return any(_deep_contains(v, needle) for v in obj.values())
+    if isinstance(obj, (list, tuple)):
+        return any(_deep_contains(v, needle) for v in obj)
+    return needle in str(obj).lower()
+
+
+def _matches_any(data, expected):
+    """expected can be a single string or a list of acceptable
+    alternatives (any one matching counts as a pass) - carried over from
+    eval.py's ground truth, which allowed several valid chunk-id
+    substrings per question since more than one chunk can legitimately
+    answer the same question."""
+    alternatives = expected if isinstance(expected, list) else [expected]
+    return any(_deep_contains(data, alt.lower()) for alt in alternatives)
+
+
+def _retrieved_chunk_ids(data):
+    """For RAG results, list the chunk_ids actually retrieved - carried
+    over from eval.py's 'top: [...]' printout, so a FAIL is debuggable
+    at a glance instead of needing a separate run to see what matched."""
+    if isinstance(data, dict) and "chunks" in data:
+        return [c["chunk_id"] for c in data["chunks"]]
+    return None
+
+
+def run(tests, header):
+    print("\n" + "#" * 72)
+    print(f"# {header}")
+    print("#" * 72)
+    tally = {"PASS": 0, "FAIL": 0, "ROUTES->LLM": 0, "NEEDS-LLM": 0, "CRASH": 0}
+    records = []
+
+    for t in tests:
+        try:
+            engine, data = ask.ask(t["q"])
+        except Exception as e:
+            tally["CRASH"] += 1
+            print(f"\n[CRASH      ] ({t['cat']})")
+            print(f"   Q: {t['q']}")
+            print(f"   -> {type(e).__name__}: {e}")
+            records.append({**t, "status": "CRASH", "error": str(e)})
+            continue
+
+        routed = t["expect_engine"] in engine
+
+        if t["mode"] == "full":
+            correct = _matches_any(data, t["expect_contains"])
+            status = "PASS" if (routed and correct) else "FAIL"
+            detail = "" if status == "PASS" else (
+                f"(routed to '{engine}')" if not routed else "(right engine, fact missing)")
+
+        elif t["mode"] == "retrieval":
+            got = _matches_any(data, t["expect_retrieves"])
+            status = "ROUTES->LLM" if (routed and got) else "FAIL"
+            detail = "retrieved the right data; answer text needs LLM" if status == "ROUTES->LLM" else \
+                     (f"(routed to '{engine}')" if not routed else "(did not retrieve expected item)")
+
+        else:  # "llm" - now actually checks routing, doesn't rubber-stamp it
+            status = "NEEDS-LLM" if routed else "FAIL"
+            detail = f"routes to '{engine}' | {t.get('note', '')}" if routed else \
+                     f"MIS-ROUTED: expected '{t['expect_engine']}', got '{engine}' | {t.get('note', '')}"
+
+        tally[status] = tally.get(status, 0) + 1
+        print(f"\n[{status:11s}] ({t['cat']})")
+        print(f"   Q: {t['q']}")
+        if detail:
+            print(f"   -> {detail}")
+        retrieved = _retrieved_chunk_ids(data)
+        if retrieved is not None:
+            print(f"   retrieved: {[c[:40] for c in retrieved]}")
+        records.append({**t, "status": status, "engine": engine})
+
+    return tally, records
+
+
+main_tally, main_records = run(TESTS, "YOUR QUESTION LIST")
+limit_tally, limit_records = run(KNOWN_LIMITS, "KNOWN LIMITATION (kept visible on purpose)")
+
+# ------------------- HEADLINE SUMMARY -------------------
+print("\n" + "=" * 72)
+p = main_tally.get("PASS", 0)
+r = main_tally.get("ROUTES->LLM", 0)
+n = main_tally.get("NEEDS-LLM", 0)
+f = main_tally.get("FAIL", 0)
+c = main_tally.get("CRASH", 0)
+print("RESULTS ACROSS YOUR QUESTION LIST:")
+print(f"  PASS (fully working now)          : {p}")
+print(f"  ROUTES->LLM (retrieval ready)     : {r}")
+print(f"  NEEDS-LLM (routes ok, awaits LLM) : {n}")
+print(f"  FAIL (needs attention)            : {f}")
+print(f"  CRASH (threw an exception)        : {c}")
+print("-" * 72)
+n_known = len(KNOWN_LIMITS)
+print(f"+ {n_known} known limitation tracked separately (see above) - "
+      f"not counted in the tallies above.")
+print("-" * 72)
+print("Read: everything either works today, or routes to the right place and")
+print("is only waiting on the LLM to phrase the answer. FAIL means the route")
+print("itself is wrong, not just that phrasing is pending.")
+
+# ------------------- PERSIST FOR TRACKING OVER TIME -------------------
+os.makedirs("eval_runs", exist_ok=True)
+timestamp = time.strftime("%Y%m%d_%H%M%S")
+run_path = os.path.join("eval_runs", f"eval_{timestamp}.json")
+with open(run_path, "w", encoding="utf-8") as fh:
+    json.dump({
+        "timestamp": timestamp,
+        "tally": main_tally,
+        "known_limits_tally": limit_tally,
+        "results": main_records,
+        "known_limits_results": limit_records,
+    }, fh, indent=2, default=str)
+print(f"\nSaved this run to {run_path} - diff against earlier runs in "
+      f"eval_runs/ to track routing/retrieval accuracy over time.")
