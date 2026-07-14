@@ -102,6 +102,30 @@ def _has_hcp_context(ql):
     return any(w in ql for w in HCP_CONTEXT_WORDS) or _detect_specialty(ql) is not None
 
 
+# Default result-list size when the question doesn't say. 20 is a
+# working compromise: generous enough that narrow filters (state +
+# specialty + tier + targeted) almost never get silently cut short,
+# but not so large that a very broad filter dumps hundreds of rows
+# into an answer nobody asked to see the whole of.
+DEFAULT_RESULT_LIMIT = 20
+
+_ALL_PATTERN = re.compile(r"\ball\b|\bevery(one)?\b")
+
+
+def _resolve_top(ql):
+    """Decide how many results to return: an explicit number ('top 30')
+    always wins: 'all'/'every' explicitly means no limit; otherwise the
+    default above applies. This is the one place that policy lives, so
+    both the filter path and the propensity-ranking path stay
+    consistent rather than drifting apart."""
+    top_match = re.search(r"top\s+(\d+)", ql)
+    if top_match:
+        return int(top_match.group(1))
+    if _ALL_PATTERN.search(ql):
+        return None
+    return DEFAULT_RESULT_LIMIT
+
+
 def _find_state(ql):
     for s in structured.df["state"].unique():
         if s in ql:
@@ -180,6 +204,8 @@ def ask(question):
     min_switching = _detect_min_switching(ql)
     competitor_signal = competitor is not None and _has_hcp_context(ql)
     if targeted is not None or competitor_signal or min_switching is not None:
+        # Default 20 if unspecified; "top 30" or "all"/"every" override it.
+        # See _resolve_top() - one shared policy, not duplicated per path.
         return "STRUCTURED / filter", structured.filter_hcps(
             state=_find_state(ql),
             specialty=_detect_specialty(ql),
@@ -187,6 +213,7 @@ def ask(question):
             targeted=targeted,
             dominant_competitor=competitor,
             min_switching=min_switching,
+            top=_resolve_top(ql),
         )
 
     # 4. "which states have the most high-tier HCPs" -> aggregate report.
@@ -209,10 +236,7 @@ def ask(question):
     # Tier is only applied if the question actually named one - no more
     # silently defaulting every unscoped "top N by propensity" to High.
     if any(p.search(ql) for p in RANK_PATTERNS) and "propensity" in ql:
-        n = 10
-        mn = re.search(r"top\s+(\d+)", ql)
-        if mn:
-            n = int(mn.group(1))
+        n = _resolve_top(ql)
         tier = _detect_tier(ql)
         st = _find_state(ql)
         if st:

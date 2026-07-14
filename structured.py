@@ -101,11 +101,15 @@ def count_writers(state):
     return {"state": state, "active": len(active), "total": len(in_state)}
 
 
-def top_n_by_propensity(n=10, tier="High"):
-    """Top N HCPs nationally by propensity score, optionally within a tier."""
+def top_n_by_propensity(n=None, tier="High"):
+    """Top N HCPs nationally by propensity score, optionally within a
+    tier. n=None means no limit - ask.py's _resolve_top() decides the
+    actual default/override policy, this function just honours whatever
+    it's given, same principle as filter_hcps()."""
     sub = df[df["tier"] == tier] if tier else df
-    top = sub.sort_values("propensity_score", ascending=False).head(n)
-    return {"n": n, "tier": tier, "results": top.to_dict("records")}
+    sub = sub.sort_values("propensity_score", ascending=False)
+    limited = sub if n is None else sub.head(n)
+    return {"n": n, "tier": tier, "count": len(sub), "results": limited.to_dict("records")}
 
 
 def states_by_high_tier(n=5):
@@ -116,9 +120,17 @@ def states_by_high_tier(n=5):
 
 def filter_hcps(state=None, specialty=None, tier=None, targeted=None,
                 dominant_competitor=None, min_switching=None,
-                sort_by="propensity_score", top=10):
+                sort_by="propensity_score", top=None):
     """Flexible multi-field filter over the HCP table (covers most
-    targeting questions)."""
+    targeting questions).
+
+    top=None (the default) means NO LIMIT - return every match. A rep
+    filtering to something specific (state + specialty + tier +
+    targeted) should get the real, complete answer, not a silently
+    truncated one. Only cap the result if the caller explicitly asks
+    for a specific number (e.g. "top 30") - that's ask.py's job to
+    detect from the question text and pass in here, not this
+    function's job to guess a default for."""
     if sort_by not in df.columns:
         return {"found": False,
                 "error": f"'{sort_by}' is not a valid column to sort by. "
@@ -139,13 +151,15 @@ def filter_hcps(state=None, specialty=None, tier=None, targeted=None,
         sub = sub[sub["switching_score"] >= min_switching]
     sub = sub.sort_values(sort_by, ascending=False)
 
+    limited = sub if top is None else sub.head(top)
+
     return {
         "found": True,
         "count": len(sub),
         "filters": {"state": state, "specialty": specialty, "tier": tier,
                     "targeted": targeted, "dominant_competitor": dominant_competitor,
                     "min_switching": min_switching},
-        "results": sub.head(top).to_dict("records"),
+        "results": limited.to_dict("records"),
     }
 
 
@@ -174,7 +188,8 @@ def format_count_writers(data):
 
 
 def format_top_n_by_propensity(data):
-    lines = [f"Top {data['n']} {data['tier'] or ''}-tier HCPs by propensity:"]
+    count_label = f"Top {data['n']}" if data["n"] is not None else "All"
+    lines = [f"{count_label} {data['tier'] or ''}-tier HCPs by propensity:"]
     for r in data["results"]:
         lines.append(f"  NPI {r['npi']} ({r['specialty']}, {r['state'].title()}) "
                       f"- propensity {r['propensity_score']:.2f}, rank {r['propensity_rank']}")
