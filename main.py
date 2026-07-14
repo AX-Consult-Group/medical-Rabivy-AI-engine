@@ -1,33 +1,100 @@
 # main.py
 # -------------------------------------------------------------------
 # Orchestrator: runs the pipeline stages in order, each feeding the next.
-#   chunk.py  -> tag.py  -> embed.py
+#   chunk.py -> tag.py -> embed.py -> (structured.py sanity check)
 # Run this one file to rebuild the whole knowledge base from scratch.
-# (search.py and eval.py are run separately, once the base is built.)
+# (search.py, ask.py, and eval_full.py are run separately, once the
+# base is built.)
+#
+# Scope note: this rebuilds the RAG side (chunk/tag/embed). It does not
+# regenerate the propensity master spreadsheet or the ground-truth eval
+# question set - "rebuild everything" here means "rebuild the knowledge
+# base", not "rebuild the whole system end to end."
 # -------------------------------------------------------------------
 
+import os
 import subprocess
 import sys
 import time
 
-# The stages, in the order they must run.
-stages = ["chunk.py", "tag.py", "embed.py"]
+# Each stage: the script to run, and how to sanity-check its output
+# actually landed (not just that the process exited 0 - a stage can
+# "succeed" while silently producing empty/malformed output, e.g. if
+# docs/ matched nothing).
+STAGES = [
+    {
+        "script": "chunk.py",
+        "check_path": "output/chunks.json",
+        "min_size": 100,
+    },
+    {
+        "script": "tag.py",
+        "check_path": "output/chunks_tagged.json",
+        "min_size": 100,
+    },
+    {
+        "script": "embed.py",
+        "check_path": "output/embeddings.npy",
+        "min_size": 100,
+    },
+]
+
+
+def _check_output(stage):
+    path = stage["check_path"]
+    if not os.path.exists(path):
+        print(f"!!! {stage['script']} exited 0 but expected output "
+              f"'{path}' does not exist. Pipeline stopped.")
+        sys.exit(1)
+    size = os.path.getsize(path)
+    if size < stage["min_size"]:
+        print(f"!!! {stage['script']} exited 0 but '{path}' is suspiciously "
+              f"small ({size} bytes) - looks empty/malformed. Pipeline stopped.")
+        sys.exit(1)
+
 
 print("=" * 60)
 print("Rebuilding the RAG knowledge base")
 print("=" * 60)
 
-for stage in stages:
-    print(f"\n>>> Running {stage} ...")
+for stage in STAGES:
+    script = stage["script"]
+    print(f"\n>>> Running {script} ...")
     start = time.time()
     # Run the stage as its own script; stop everything if one fails.
-    result = subprocess.run([sys.executable, stage])
+    # subprocess.run (not import) is deliberate: chunk.py/tag.py/embed.py
+    # are top-level scripts, not wrapped in functions, so importing them
+    # would run their code anyway while tangling namespaces together and
+    # making a failure in one script harder to isolate from the next.
+    result = subprocess.run([sys.executable, script])
     if result.returncode != 0:
-        print(f"\n!!! {stage} failed. Pipeline stopped.")
+        print(f"\n!!! {script} failed (exit code {result.returncode}). Pipeline stopped.")
         sys.exit(1)
-    print(f">>> {stage} done in {time.time() - start:.1f}s")
+
+    _check_output(stage)
+    print(f">>> {script} done in {time.time() - start:.1f}s - "
+          f"{stage['check_path']} looks present and non-trivial.")
+
+# ---- Final sanity check: does structured.py's data path still load? ----
+# structured.py isn't part of this rebuild (it's a separate data source,
+# the propensity spreadsheet, not chunked/tagged/embedded content) - but
+# since it loads a dated Excel filename via glob, it's cheap to confirm
+# here that it still resolves and loads cleanly, rather than discovering
+# a broken path later when someone runs ask.py by hand.
+print("\n>>> Checking structured.py's data path ...")
+start = time.time()
+check = subprocess.run(
+    [sys.executable, "-c", "import structured; print('OK:', structured._DATA_PATH)"],
+    capture_output=True, text=True,
+)
+if check.returncode != 0:
+    print("!!! structured.py failed to load its data file:")
+    print(check.stderr)
+    sys.exit(1)
+print(f">>> {check.stdout.strip()} ({time.time() - start:.1f}s)")
 
 print("\n" + "=" * 60)
 print("Pipeline complete. Knowledge base is ready.")
-print("Run 'python search.py' to query it, or 'python eval.py' to test it.")
+print("Run 'python search.py' or 'python ask.py' to query it, "
+      "or 'python eval_full.py' to test it.")
 print("=" * 60)

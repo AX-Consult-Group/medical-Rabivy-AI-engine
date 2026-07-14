@@ -30,6 +30,16 @@ def extract_field(text, label):
             return s.split(":", 1)[1].strip()
     return ""
 
+# Make chunk_id unique; if it collides, append _2, _3, ... and warn.
+def make_unique_id(base_id, seen_counter):
+    seen_counter[base_id] += 1
+    n = seen_counter[base_id]
+    if n == 1:
+        return base_id
+    print(f"! WARNING: duplicate chunk_id base '{base_id}' seen {n} times - "
+          f"suffixing as '{base_id}_{n}'")
+    return f"{base_id}_{n}"
+
 
 all_md_paths = glob.glob("docs/**/*.md", recursive=True)
 
@@ -37,9 +47,12 @@ all_chunks = []
 n_cards = 0
 n_narrative_docs = 0
 n_skipped = 0
+n_bad_npi = 0
+id_counter = Counter()
 
 for path in all_md_paths:
     filename = os.path.basename(path)
+    rel_path = os.path.relpath(path)  # full relative path, kept for traceability
 
     if filename in SKIP_FILENAMES:
         n_skipped += 1
@@ -52,13 +65,26 @@ for path in all_md_paths:
         # ---- CARD: one whole chunk, with metadata pulled out ----
         match = re.search(r"(\d{10})", filename)          # NPIs are 10 digits
         npi = match.group(1) if match else filename.replace(".md", "")
+
+        # Safety net: NPI must be exactly 10 digits. If it isn't, this card
+        # can't reliably join back to the master HCP table later - flag it
+        # instead of silently shipping a bad key.
+        if not re.fullmatch(r"\d{10}", npi):
+            n_bad_npi += 1
+            print(f"! WARNING: could not extract a valid 10-digit NPI from "
+                  f"'{filename}' (got '{npi}') - check this file/naming.")
+
         location = extract_field(text, "Location")        # e.g. "Arkansas (South)"
         state = location.split("(")[0].strip()            # -> "Arkansas"
         specialty = extract_field(text, "Specialty")      # e.g. "Primary Care"
 
+        base_id = f"card_{npi}"
+        chunk_id = make_unique_id(base_id, id_counter)
+
         all_chunks.append({
-            "chunk_id": f"card_{npi}",
+            "chunk_id": chunk_id,
             "source_doc": filename.replace(".md", ""),
+            "source_path": rel_path,
             "doc_type": "hcp_card",
             "npi": npi,
             "state": state,
@@ -85,9 +111,13 @@ for path in all_md_paths:
             # For the state summary doc, the heading IS the state.
             state = heading if doc_name == "state_market_summary" else ""
 
+            base_id = f"{doc_name}__{heading.lower().replace(' ', '_')}"
+            chunk_id = make_unique_id(base_id, id_counter)
+
             all_chunks.append({
-                "chunk_id": f"{doc_name}__{heading.lower().replace(' ', '_')}",
+                "chunk_id": chunk_id,
                 "source_doc": doc_name,
+                "source_path": rel_path,
                 "doc_type": doc_type,
                 "npi": "",
                 "state": state,
@@ -100,6 +130,7 @@ for path in all_md_paths:
 print(f"Narrative docs chunked : {n_narrative_docs}")
 print(f"Cards added (1 each)   : {n_cards}")
 print(f"Meta files skipped     : {n_skipped}")
+print(f"Cards with bad NPI     : {n_bad_npi}")
 print(f"TOTAL chunks           : {len(all_chunks)}")
 print("By doc_type            :", dict(Counter(c["doc_type"] for c in all_chunks)))
 
@@ -108,7 +139,7 @@ os.makedirs("output", exist_ok=True)
 with open("output/chunks.json", "w", encoding="utf-8") as f:
     json.dump(all_chunks, f, indent=2)
 
-columns = ["chunk_id", "source_doc", "doc_type", "npi", "state", "specialty", "heading", "text"]
+columns = ["chunk_id", "source_doc", "source_path", "doc_type", "npi", "state", "specialty", "heading", "text"]
 try:
     with open("output/chunks.csv", "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=columns)
@@ -117,4 +148,10 @@ try:
 except PermissionError:
     print("\n! chunks.csv is open in Excel - close it and re-run.")
 
-print("\nDone. Saved output/chunks.json and output/chunks.csv")
+# ---- Manifest: cheap chunk_id -> source_path lookup, separate from the ----
+# ---- full chunk content, for quick "where did this come from" checks.  ----
+manifest = {c["chunk_id"]: c["source_path"] for c in all_chunks}
+with open("output/chunk_manifest.json", "w", encoding="utf-8") as f:
+    json.dump(manifest, f, indent=2)
+
+print("\nDone. Saved output/chunks.json, output/chunks.csv, output/chunk_manifest.json")
