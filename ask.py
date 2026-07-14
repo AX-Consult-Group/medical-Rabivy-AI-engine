@@ -46,8 +46,21 @@ LIST_WORDS = ["list", "which ", "show me", "find ", "who are", "give me"]
 STATE_AGG_PHRASES = ["which states", "what states", "states with the most",
                      "states have the most", "top states"]
 
-SPECIALTIES = {"endocrinolog": "Endocrinology", "primary care": "Primary Care",
+SPECIALTIES = {"endo": "Endocrinology", "endocrinolog": "Endocrinology", "primary care": "Primary Care",
                "obesity medicine": "Obesity Medicine", "obesity": "Obesity Medicine"}
+
+# Casual abbreviations reps actually use. Word-boundary matched so
+# "endo"/"endos" don't accidentally match inside unrelated words like
+# "endorse" or "endocrine system" mentioned in passing. Found via a
+# real run: "endos" matched nothing in SPECIALTIES above, so the
+# specialty filter silently dropped out entirely and Primary Care /
+# Obesity Medicine rows leaked into a question that only asked about
+# endocrinologists.
+SPECIALTY_ABBREVIATIONS = [
+    (re.compile(r"\bendos?\b"), "Endocrinology"),
+    (re.compile(r"\bpcps?\b"), "Primary Care"),
+    (re.compile(r"\bob[\s-]?med\b"), "Obesity Medicine"),
+]
 
 # Same abbreviation set added to search.py, kept consistent here so
 # state detection doesn't silently work in one engine's router and not
@@ -142,6 +155,9 @@ def _detect_specialty(ql):
     for key, val in SPECIALTIES.items():
         if key in ql:
             return val
+    for pattern, val in SPECIALTY_ABBREVIATIONS:
+        if pattern.search(ql):
+            return val
     return None
 
 
@@ -180,11 +196,61 @@ def _detect_min_switching(ql):
     return None
 
 
+# Formulary status language -> the real formulary_tier column values.
+# "non-preferred" is checked before bare "preferred", since "preferred"
+# is a literal substring of "non-preferred" (word-boundary regex alone
+# doesn't protect against that - the hyphen is a boundary character
+# too) - same ordering lesson as the targeted/not-targeted detection.
+def _detect_formulary(ql):
+    if re.search(r"\bnon[- ]?preferred\b", ql):
+        return "NonPreferred"
+    if re.search(r"\bpreferred\b", ql):
+        return "Preferred"
+    if re.search(r"\bpa[- ]?required\b|\bprior auth", ql):
+        return "PARequired"
+    if re.search(r"\bnot[- ]?covered\b|\buncovered\b", ql):
+        return "NotCovered"
+    return None
+
+
+# Recent sample-request language -> the real sample_request_recent
+# column (0/1). Checked for a negative phrasing first, same reasoning
+# as _detect_formulary above.
+_SAMPLE_NO = re.compile(r"\bno sample request\b|\bwithout (?:a )?sample request\b|"
+                         r"\bhas(?:n't| not) requested (?:a )?sample\b")
+_SAMPLE_YES = re.compile(r"\bsample request(?:ed)?\b|\brequested (?:a )?sample\b")
+
+
+def _detect_sample_request(ql):
+    if _SAMPLE_NO.search(ql):
+        return 0
+    if _SAMPLE_YES.search(ql):
+        return 1
+    return None
+
+
+# "high-volume writers" (Q8-style) means sort by actual Rx volume, not
+# the default propensity_score - otherwise a "high-volume" question
+# would come back ranked by the wrong column entirely.
+_HIGH_VOLUME_PATTERN = re.compile(r"\bhigh[- ]?volume\b|\bhighest volume\b")
+
+
+def _detect_sort_by(ql):
+    if _HIGH_VOLUME_PATTERN.search(ql):
+        return "rx_volume_monthly"
+    return "propensity_score"
+
+
 def ask(question):
     ql = question.lower()
 
-    # 1. "how many ... writers in X" -> count
-    if any(w in ql for w in COUNT_WORDS) and ("writer" in ql or "prescriber" in ql or "hcp" in ql):
+    # 1. "how many ... writers in X" -> count. Also catches abbreviated
+    # fragments like "active writers in TX?" that drop the explicit
+    # how-many/count phrase entirely - there's no other structured
+    # function "active <role> in <state>" could reasonably mean besides
+    # this count, so it's safe to widen the trigger rather than let it
+    # fall to RAG (which can't answer a numeric question at all).
+    if (any(w in ql for w in COUNT_WORDS) or "active" in ql) and ("writer" in ql or "prescriber" in ql or "hcp" in ql):
         st = _find_state(ql)
         if st:
             return "STRUCTURED / count", structured.count_writers(st)
@@ -195,15 +261,19 @@ def ask(question):
         return "STRUCTURED / hcp scripts", structured.hcp_scripts(m.group(1))
 
     # 3. Multi-field targeting filter - THE previously-missing path.
-    # Triggered by targeted-status, competitor, or switching-score
-    # language, none of which any other path (here or in search.py)
-    # can answer, since chunks_tagged.json has none of these fields.
+    # Triggered by targeted-status, competitor, switching-score,
+    # formulary-status, or recent-sample-request language, none of
+    # which any other path (here or in search.py) can answer, since
+    # chunks_tagged.json has none of these fields.
     # Tier alone doesn't trigger this - see note at path 6 for why.
     targeted = _detect_targeted(ql)
     competitor = _detect_competitor(ql)
     min_switching = _detect_min_switching(ql)
+    formulary_tier = _detect_formulary(ql)
+    sample_request = _detect_sample_request(ql)
     competitor_signal = competitor is not None and _has_hcp_context(ql)
-    if targeted is not None or competitor_signal or min_switching is not None:
+    if (targeted is not None or competitor_signal or min_switching is not None
+            or formulary_tier is not None or sample_request is not None):
         # Default 20 if unspecified; "top 30" or "all"/"every" override it.
         # See _resolve_top() - one shared policy, not duplicated per path.
         return "STRUCTURED / filter", structured.filter_hcps(
@@ -213,6 +283,9 @@ def ask(question):
             targeted=targeted,
             dominant_competitor=competitor,
             min_switching=min_switching,
+            formulary_tier=formulary_tier,
+            recent_sample_request=sample_request,
+            sort_by=_detect_sort_by(ql),
             top=_resolve_top(ql),
         )
 

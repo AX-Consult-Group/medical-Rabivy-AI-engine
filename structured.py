@@ -120,6 +120,7 @@ def states_by_high_tier(n=5):
 
 def filter_hcps(state=None, specialty=None, tier=None, targeted=None,
                 dominant_competitor=None, min_switching=None,
+                formulary_tier=None, recent_sample_request=None,
                 sort_by="propensity_score", top=None):
     """Flexible multi-field filter over the HCP table (covers most
     targeting questions).
@@ -149,6 +150,10 @@ def filter_hcps(state=None, specialty=None, tier=None, targeted=None,
         sub = sub[sub["dominant_competitor"] == dominant_competitor]
     if min_switching is not None:
         sub = sub[sub["switching_score"] >= min_switching]
+    if formulary_tier:
+        sub = sub[sub["formulary_tier"] == formulary_tier]
+    if recent_sample_request is not None:
+        sub = sub[sub["sample_request_recent"] == recent_sample_request]
     sub = sub.sort_values(sort_by, ascending=False)
 
     limited = sub if top is None else sub.head(top)
@@ -158,7 +163,8 @@ def filter_hcps(state=None, specialty=None, tier=None, targeted=None,
         "count": len(sub),
         "filters": {"state": state, "specialty": specialty, "tier": tier,
                     "targeted": targeted, "dominant_competitor": dominant_competitor,
-                    "min_switching": min_switching},
+                    "min_switching": min_switching, "formulary_tier": formulary_tier,
+                    "recent_sample_request": recent_sample_request},
         "results": limited.to_dict("records"),
     }
 
@@ -209,7 +215,8 @@ def format_filter_hcps(data):
     f = data["filters"]
     header = (f"{data['count']} HCPs match (state={f['state']}, specialty={f['specialty']}, "
               f"tier={f['tier']}, targeted={f['targeted']}, competitor={f['dominant_competitor']}, "
-              f"min_switching={f['min_switching']}). "
+              f"min_switching={f['min_switching']}, formulary_tier={f['formulary_tier']}, "
+              f"recent_sample_request={f['recent_sample_request']}). "
               f"Top {len(data['results'])}:")
     lines = [header]
     for r in data["results"]:

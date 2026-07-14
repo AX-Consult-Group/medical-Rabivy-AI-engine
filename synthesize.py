@@ -41,8 +41,10 @@ Rules you must follow:
 - If DATA is empty, marked "not found", or marked LOW CONFIDENCE, say so plainly rather than guessing or filling gaps.
 - If DATA comes from retrieved document chunks, ground your answer in their text and mention which chunk/document it came from.
 - If DATA is a structured table result (rows with fields like npi, propensity_score, tier), summarize it clearly - don't just restate raw JSON.
+- If DATA contains MULTIPLE rows (a list of HCPs/prescribers), list EVERY row that appears in DATA, not just a handful of examples. Reps use these as actual call lists - a partial preview with "and more like this" is not useful, even if it reads shorter. Every row shown to you must appear in your answer.
+- If DATA is a SINGLE row, or retrieved narrative/document chunks, then yes - be concise, a few sentences, no padding.
 - If RESULT says "showing the top N of Y total", start your answer with something like "Here are the top N (out of Y total matches)" - a clean, natural lead-in, not an awkward afterthought sentence bolted onto the end.
-- Be concise and rep-friendly: a few sentences, not a report. No unnecessary preamble.
+- No unnecessary preamble or repeating the question back before answering it.
 """
 
 
@@ -105,13 +107,103 @@ def _describe_data(route, data):
     return "\n".join(lines)
 
 
+def _format_row(row):
+    """One HCP row -> one readable line. Deterministic, not the LLM's
+    job - a list a rep will actually work from needs to be guaranteed
+    complete and correct, not 'usually complete' depending on how the
+    model felt like summarizing it."""
+    parts = [f"NPI {row.get('npi')}"]
+    if row.get("specialty"):
+        parts.append(str(row["specialty"]))
+    if row.get("state"):
+        parts.append(str(row["state"]).title())
+    if row.get("propensity_score") is not None:
+        parts.append(f"propensity {row['propensity_score']:.3f}")
+    if row.get("tier"):
+        parts.append(f"tier {row['tier']}")
+    if row.get("switching_score") is not None:
+        parts.append(f"switching {row['switching_score']:.2f}")
+    return " | ".join(parts)
+
+
+def _format_rows_list(results):
+    return "\n".join(f"  {i}. {_format_row(r)}" for i, r in enumerate(results, 1))
+
+
+# Deterministic clarifications keyed by route. Appended to the final
+# answer no matter what the LLM writes - same reasoning as the
+# DATA CHECK line and the deterministic row list: a fact this easy to
+# misread by a rep shouldn't depend on the AI remembering to mention it
+# every time. "top prescriber" ranks by current monthly Rx volume, NOT
+# by propensity/opportunity - a rep could otherwise read "top" and
+# assume "best target" when it might be an already-saturated,
+# competitor-loyal account.
+CLARIFICATIONS = {
+    "STRUCTURED / top prescriber": (
+        "\n\n(Note: \"top\" here means highest current monthly prescription "
+        "volume - not propensity/opportunity. Check the tier and propensity "
+        "score above separately before treating this as your best target.)"
+    ),
+}
+
+
+def _intro_sentence(question, total, shown, model=GROQ_MODEL):
+    """Ask the LLM for ONE short intro sentence framing a list - not the
+    list itself. The actual rows are printed deterministically right
+    after this, in _format_rows_list(). Keeping the LLM's job small
+    here (one sentence, no data to transcribe) means there's nothing
+    for it to get wrong or drop."""
+    prompt = (
+        f"QUESTION: {question}\n\n"
+        f"There are {total} total matches; the top {shown} (sorted by propensity score) "
+        f"will be printed directly below your sentence, by code, not by you. "
+        f"Write ONE short, natural sentence introducing that list - e.g. "
+        f"'Here are the top {shown} of {total} total matches, sorted by propensity score:'. "
+        f"Do not list any NPIs, names, or numbers yourself beyond {shown} and {total} - "
+        f"just the one-sentence intro."
+    )
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "You write a single short introductory sentence. Never invent data beyond the two numbers given."},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.2,
+        )
+        return response.choices[0].message.content.strip(), None
+    except Exception as e:
+        # Safe fallback needs no LLM at all - the list itself is what
+        # actually matters, the intro sentence is just polish.
+        return f"Here are the top {shown} of {total} total matches, sorted by propensity score:", f"{type(e).__name__}: {e}"
+
+
 def synthesize(question, model=GROQ_MODEL):
     """Run the question through ask.py, then have the LLM write the
     final answer from whatever ask.py found. Returns a dict so callers
-    can inspect the route/raw data too, not just the text."""
-    route, data = ask.ask(question)
-    data_block = _describe_data(route, data)
+    can inspect the route/raw data too, not just the text.
 
+    Multi-row structured results (a list of HCPs) are handled
+    differently from everything else: the LLM only writes a short
+    intro sentence, and the actual rows are printed by code
+    (_format_rows_list), never transcribed by the LLM. Asking an LLM to
+    faithfully reproduce a 20-row list in prose is unreliable - it will
+    sometimes summarize down to a handful of examples even when told
+    not to. A deterministic list can't do that."""
+    route, data = ask.ask(question)
+
+    is_multi_row = (route.startswith("STRUCTURED") and isinstance(data, dict)
+                     and "results" in data and len(data["results"]) > 1)
+
+    if is_multi_row:
+        total = data.get("count", len(data["results"]))
+        shown = len(data["results"])
+        intro, error = _intro_sentence(question, total, shown, model=model)
+        answer = intro + "\n" + _format_rows_list(data["results"])
+        return {"question": question, "route": route, "answer": answer,
+                "error": error, "raw_data": data}
+
+    data_block = _describe_data(route, data)
     try:
         response = client.chat.completions.create(
             model=model,
@@ -132,6 +224,9 @@ def synthesize(question, model=GROQ_MODEL):
         # sit behind something a rep is actually using.
         answer = None
         error = f"{type(e).__name__}: {e}"
+
+    if answer is not None and route in CLARIFICATIONS:
+        answer += CLARIFICATIONS[route]
 
     return {"question": question, "route": route, "answer": answer,
             "error": error, "raw_data": data}
