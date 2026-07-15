@@ -262,6 +262,13 @@ _GENERIC_EXCLUDE_COLUMNS = {"npi", "hcp_id", "targeted", "sample_request_recent"
 _OP_ABOVE = r"(?:above|over|greater than|more than|higher than|>)"
 _OP_BELOW = r"(?:below|under|less than|fewer than|lower than|<)"
 
+# Comparison language for the "compare NPI X to a typical Y" special
+# case (see path 7 in ask()) - needs both the HCP's own card AND a
+# benchmark chunk, not just the card alone.
+_COMPARISON_WORDS = re.compile(
+    r"\b(?:compare|comparison|typical|benchmark|average|versus|vs\.?|"
+    r"high or low|low or high|compared to|relative to)\b")
+
 
 def _column_phrase_pattern(col):
     """Turn a real column name like 'days_since_contact' into a regex
@@ -451,6 +458,42 @@ def ask(question):
     # Returns actual chunk text + source metadata, not just chunk_id/score
     # - a bare ID list can't feed an answer-synthesis step that needs
     # the real retrieved content.
+    #
+    # Special case: "compare NPI X to a typical Y" / "is this doctor high
+    # or low for their specialty" - a question naming a specific NPI
+    # PLUS comparison language. A plain search would only return that
+    # one HCP's card (the NPI-exact-match path in search_documents.py
+    # short-circuits to just the card) - there'd be nothing to actually
+    # compare against. Found via a real test: "didn't compare" was the
+    # exact complaint. Fix: retrieve the card AND a benchmark chunk for
+    # that specialty, so there's actually something to compare to.
+    m_npi = re.search(r"\b(\d{10})\b", question)
+    if m_npi and _COMPARISON_WORDS.search(ql):
+        card_route, card_results = search_documents.search(question)
+        specialty = None
+        if card_results:
+            card_chunk, _ = card_results[0]
+            specialty = card_chunk.get("specialty") or None
+        benchmark_query = (f"typical {specialty} benchmark profile" if specialty
+                            else "typical specialty benchmark profile")
+        _, benchmark_results = search_documents.search(benchmark_query, top_k=2)
+        combined = card_results + benchmark_results
+        low_confidence = not combined
+        return "RAG", {
+            "route": "comparison (card + benchmark)",
+            "low_confidence": low_confidence,
+            "chunks": [
+                {
+                    "chunk_id": chunk["chunk_id"],
+                    "score": score,
+                    "doc_type": chunk["doc_type"],
+                    "source_doc": chunk.get("source_doc"),
+                    "text": chunk["text"],
+                }
+                for chunk, score in combined
+            ],
+        }
+
     route, results = search_documents.search(question)
     low_confidence = "low confidence" in route or not results
     return "RAG", {

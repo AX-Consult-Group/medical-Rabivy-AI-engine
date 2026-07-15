@@ -185,7 +185,7 @@ def filter_hcps(state=None, specialty=None, tier=None, targeted=None,
                     "min_switching": min_switching, "formulary_tier": formulary_tier,
                     "recent_sample_request": recent_sample_request,
                     "min_pa_burden": min_pa_burden, "max_pa_burden": max_pa_burden,
-                    "extra_filters": extra_filters},
+                    "extra_filters": extra_filters, "sort_by": sort_by},
         "results": limited.to_dict("records"),
     }
 
