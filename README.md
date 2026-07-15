@@ -17,10 +17,13 @@ Rabivy and AX Pharmaceuticals are fictional and were created solely for the purp
 |---|---|---|
 | 1 | GTM Strategy | Complete |
 | 2 | Propensity Model | Complete (synthetic data) |
-| 3 | Knowledge Repository | Simulated |
-| 4 | Retrieval Layer (RAG) | Not started |
+| 3 | Knowledge Repository | Complete (synthetic data) |
+| 4 | Retrieval Layer (RAG) | Complete (still debugging) |
 | 5 | AI Evaluation Layer | Not started |
 | 6 | Conversational Interface | Not started |
+
+To Do:
+Ground Truth Question 20 issue: This question routes to RAG and does a single search using the whole question as the query. That search finds state_market_summary__new_york — a document that's purely targeting data (prescriber lists, volumes, propensity). It contains nothing about messaging, competitive positioning, or talking points at all. So the AI genuinely only has half the ingredients — it can't "tap into key facts that make Rabivy better" because those facts were never retrieved in the first place. It's not an AI reasoning failure; it's a retrieval gap, same category as "didn't compare" was.
 
 ---
 
