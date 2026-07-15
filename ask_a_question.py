@@ -88,9 +88,9 @@ TIER_PATTERNS = [
 # COMPETITOR_KEYWORDS so the two stay easy to keep in sync if a third
 # competitor is added.
 COMPETITOR_KEYWORDS = {
-    "novo_nordisk": {"words": ["semaglutide", "ozempic", "wegovy", "novo nordisk"],
+    "novo_nordisk": {"words": ["semaglutide", "ozempic", "wegovy", "novo nordisk", "novo"],
                      "label": "Novo Nordisk"},
-    "eli_lilly": {"words": ["tirzepatide", "mounjaro", "zepbound", "eli lilly", "lilly"],
+    "eli_lilly": {"words": ["tirzepatide", "mounjaro", "zepbound", "eli lilly", "lilly", "eli", "Eli"],
                   "label": "Eli Lilly"},
 }
 
