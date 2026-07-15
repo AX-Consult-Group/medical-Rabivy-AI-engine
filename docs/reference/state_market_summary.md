@@ -3,7 +3,7 @@ Reference document. Derived from the Rabivy prescriber master dataset (n = 15,00
 One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across all brands.
 
 ## Alabama
-- HCP universe: 174 | Active GLP-1 writers: 91
+- HCP universe: 174 | Active GLP-1 writers: 89
 - Total monthly GLP-1 Rx: 1,928 | Total NRx: 452
 - Average Rabivy propensity: 15/100
 - Tier breakdown: High 23 | Medium 52 | Watch 99
@@ -25,7 +25,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP6155 (Endocrinology) - 83 Rx/month, propensity 49/100, tier High
 
 ## Arizona
-- HCP universe: 312 | Active GLP-1 writers: 164
+- HCP universe: 312 | Active GLP-1 writers: 162
 - Total monthly GLP-1 Rx: 3,960 | Total NRx: 1,056
 - Average Rabivy propensity: 18/100
 - Tier breakdown: High 57 | Medium 109 | Watch 146
@@ -36,7 +36,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP14831 (Obesity Medicine) - 159 Rx/month, propensity 68/100, tier High
 
 ## Arkansas
-- HCP universe: 113 | Active GLP-1 writers: 58
+- HCP universe: 113 | Active GLP-1 writers: 54
 - Total monthly GLP-1 Rx: 1,251 | Total NRx: 342
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 18 | Medium 43 | Watch 52
@@ -47,7 +47,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP12008 (Endocrinology) - 61 Rx/month, propensity 51/100, tier High
 
 ## California
-- HCP universe: 1,504 | Active GLP-1 writers: 776
+- HCP universe: 1,504 | Active GLP-1 writers: 743
 - Total monthly GLP-1 Rx: 19,170 | Total NRx: 4,809
 - Average Rabivy propensity: 17/100
 - Tier breakdown: High 227 | Medium 524 | Watch 753
@@ -58,7 +58,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP11056 (Obesity Medicine) - 239 Rx/month, propensity 89/100, tier High
 
 ## Colorado
-- HCP universe: 254 | Active GLP-1 writers: 123
+- HCP universe: 254 | Active GLP-1 writers: 118
 - Total monthly GLP-1 Rx: 3,187 | Total NRx: 757
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 33 | Medium 104 | Watch 117
@@ -69,7 +69,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP10308 (Obesity Medicine) - 126 Rx/month, propensity 35/100, tier High
 
 ## Connecticut
-- HCP universe: 196 | Active GLP-1 writers: 106
+- HCP universe: 196 | Active GLP-1 writers: 105
 - Total monthly GLP-1 Rx: 1,982 | Total NRx: 454
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 27 | Medium 62 | Watch 107
@@ -80,7 +80,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP8582 (Endocrinology) - 66 Rx/month, propensity 23/100, tier Medium
 
 ## Delaware
-- HCP universe: 58 | Active GLP-1 writers: 26
+- HCP universe: 58 | Active GLP-1 writers: 25
 - Total monthly GLP-1 Rx: 561 | Total NRx: 137
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 9 | Medium 19 | Watch 30
@@ -91,7 +91,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP12673 (Endocrinology) - 49 Rx/month, propensity 26/100, tier Medium
 
 ## Florida
-- HCP universe: 956 | Active GLP-1 writers: 520
+- HCP universe: 956 | Active GLP-1 writers: 511
 - Total monthly GLP-1 Rx: 12,557 | Total NRx: 3,002
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 149 | Medium 314 | Watch 493
@@ -102,7 +102,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP1673 (Obesity Medicine) - 193 Rx/month, propensity 61/100, tier High
 
 ## Georgia
-- HCP universe: 405 | Active GLP-1 writers: 197
+- HCP universe: 405 | Active GLP-1 writers: 188
 - Total monthly GLP-1 Rx: 4,446 | Total NRx: 1,236
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 67 | Medium 131 | Watch 207
@@ -124,7 +124,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP10524 (Endocrinology) - 86 Rx/month, propensity 46/100, tier High
 
 ## Idaho
-- HCP universe: 81 | Active GLP-1 writers: 45
+- HCP universe: 81 | Active GLP-1 writers: 44
 - Total monthly GLP-1 Rx: 1,089 | Total NRx: 223
 - Average Rabivy propensity: 17/100
 - Tier breakdown: High 15 | Medium 27 | Watch 39
@@ -135,7 +135,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP12617 (Endocrinology) - 104 Rx/month, propensity 35/100, tier High
 
 ## Illinois
-- HCP universe: 654 | Active GLP-1 writers: 328
+- HCP universe: 654 | Active GLP-1 writers: 325
 - Total monthly GLP-1 Rx: 8,014 | Total NRx: 1,812
 - Average Rabivy propensity: 15/100
 - Tier breakdown: High 88 | Medium 234 | Watch 332
@@ -146,7 +146,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP13209 (Endocrinology) - 195 Rx/month, propensity 77/100, tier High
 
 ## Indiana
-- HCP universe: 241 | Active GLP-1 writers: 113
+- HCP universe: 241 | Active GLP-1 writers: 110
 - Total monthly GLP-1 Rx: 2,620 | Total NRx: 671
 - Average Rabivy propensity: 15/100
 - Tier breakdown: High 26 | Medium 87 | Watch 128
@@ -157,7 +157,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP7643 (Endocrinology) - 118 Rx/month, propensity 68/100, tier High
 
 ## Iowa
-- HCP universe: 139 | Active GLP-1 writers: 63
+- HCP universe: 139 | Active GLP-1 writers: 61
 - Total monthly GLP-1 Rx: 1,677 | Total NRx: 352
 - Average Rabivy propensity: 14/100
 - Tier breakdown: High 16 | Medium 44 | Watch 79
@@ -168,7 +168,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP1683 (Endocrinology) - 130 Rx/month, propensity 28/100, tier Medium
 
 ## Kansas
-- HCP universe: 138 | Active GLP-1 writers: 67
+- HCP universe: 138 | Active GLP-1 writers: 66
 - Total monthly GLP-1 Rx: 1,404 | Total NRx: 391
 - Average Rabivy propensity: 15/100
 - Tier breakdown: High 16 | Medium 55 | Watch 67
@@ -212,7 +212,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP8658 (Obesity Medicine) - 56 Rx/month, propensity 55/100, tier High
 
 ## Maryland
-- HCP universe: 346 | Active GLP-1 writers: 174
+- HCP universe: 346 | Active GLP-1 writers: 166
 - Total monthly GLP-1 Rx: 4,373 | Total NRx: 1,135
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 49 | Medium 121 | Watch 176
@@ -223,7 +223,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP11557 (Obesity Medicine) - 176 Rx/month, propensity 64/100, tier High
 
 ## Massachusetts
-- HCP universe: 541 | Active GLP-1 writers: 266
+- HCP universe: 541 | Active GLP-1 writers: 264
 - Total monthly GLP-1 Rx: 6,375 | Total NRx: 1,756
 - Average Rabivy propensity: 17/100
 - Tier breakdown: High 87 | Medium 189 | Watch 265
@@ -234,7 +234,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP10731 (Obesity Medicine) - 170 Rx/month, propensity 90/100, tier High
 
 ## Michigan
-- HCP universe: 442 | Active GLP-1 writers: 226
+- HCP universe: 442 | Active GLP-1 writers: 224
 - Total monthly GLP-1 Rx: 5,705 | Total NRx: 1,346
 - Average Rabivy propensity: 17/100
 - Tier breakdown: High 69 | Medium 159 | Watch 214
@@ -245,7 +245,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP3648 (Obesity Medicine) - 163 Rx/month, propensity 58/100, tier High
 
 ## Minnesota
-- HCP universe: 241 | Active GLP-1 writers: 122
+- HCP universe: 241 | Active GLP-1 writers: 118
 - Total monthly GLP-1 Rx: 2,630 | Total NRx: 726
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 33 | Medium 90 | Watch 118
@@ -256,7 +256,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP13788 (Obesity Medicine) - 87 Rx/month, propensity 26/100, tier Medium
 
 ## Mississippi
-- HCP universe: 96 | Active GLP-1 writers: 48
+- HCP universe: 96 | Active GLP-1 writers: 46
 - Total monthly GLP-1 Rx: 1,249 | Total NRx: 394
 - Average Rabivy propensity: 18/100
 - Tier breakdown: High 19 | Medium 30 | Watch 47
@@ -267,7 +267,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP1115 (Endocrinology) - 99 Rx/month, propensity 74/100, tier High
 
 ## Missouri
-- HCP universe: 283 | Active GLP-1 writers: 136
+- HCP universe: 283 | Active GLP-1 writers: 133
 - Total monthly GLP-1 Rx: 2,870 | Total NRx: 674
 - Average Rabivy propensity: 15/100
 - Tier breakdown: High 35 | Medium 93 | Watch 155
@@ -278,7 +278,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP11161 (Obesity Medicine) - 99 Rx/month, propensity 31/100, tier Medium
 
 ## Montana
-- HCP universe: 60 | Active GLP-1 writers: 33
+- HCP universe: 60 | Active GLP-1 writers: 32
 - Total monthly GLP-1 Rx: 1,071 | Total NRx: 261
 - Average Rabivy propensity: 21/100
 - Tier breakdown: High 12 | Medium 24 | Watch 24
@@ -289,7 +289,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP8724 (Endocrinology) - 113 Rx/month, propensity 55/100, tier High
 
 ## Nebraska
-- HCP universe: 94 | Active GLP-1 writers: 49
+- HCP universe: 94 | Active GLP-1 writers: 48
 - Total monthly GLP-1 Rx: 1,277 | Total NRx: 294
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 16 | Medium 30 | Watch 48
@@ -300,7 +300,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP10769 (Obesity Medicine) - 126 Rx/month, propensity 72/100, tier High
 
 ## Nevada
-- HCP universe: 150 | Active GLP-1 writers: 73
+- HCP universe: 150 | Active GLP-1 writers: 71
 - Total monthly GLP-1 Rx: 1,859 | Total NRx: 499
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 24 | Medium 48 | Watch 78
@@ -311,7 +311,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP13966 (Obesity Medicine) - 151 Rx/month, propensity 34/100, tier High
 
 ## New Hampshire
-- HCP universe: 63 | Active GLP-1 writers: 33
+- HCP universe: 63 | Active GLP-1 writers: 32
 - Total monthly GLP-1 Rx: 606 | Total NRx: 148
 - Average Rabivy propensity: 18/100
 - Tier breakdown: High 11 | Medium 28 | Watch 24
@@ -322,7 +322,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP11323 (Obesity Medicine) - 49 Rx/month, propensity 25/100, tier Medium
 
 ## New Jersey
-- HCP universe: 486 | Active GLP-1 writers: 236
+- HCP universe: 486 | Active GLP-1 writers: 233
 - Total monthly GLP-1 Rx: 5,666 | Total NRx: 1,343
 - Average Rabivy propensity: 17/100
 - Tier breakdown: High 83 | Medium 169 | Watch 234
@@ -333,7 +333,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP2789 (Endocrinology) - 145 Rx/month, propensity 45/100, tier High
 
 ## New Mexico
-- HCP universe: 84 | Active GLP-1 writers: 45
+- HCP universe: 84 | Active GLP-1 writers: 44
 - Total monthly GLP-1 Rx: 1,145 | Total NRx: 287
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 12 | Medium 30 | Watch 42
@@ -344,7 +344,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP5328 (Endocrinology) - 68 Rx/month, propensity 28/100, tier Medium
 
 ## New York
-- HCP universe: 1,285 | Active GLP-1 writers: 657
+- HCP universe: 1,285 | Active GLP-1 writers: 644
 - Total monthly GLP-1 Rx: 14,763 | Total NRx: 3,672
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 174 | Medium 481 | Watch 630
@@ -355,7 +355,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP14705 (Endocrinology) - 162 Rx/month, propensity 76/100, tier High
 
 ## North Carolina
-- HCP universe: 384 | Active GLP-1 writers: 189
+- HCP universe: 384 | Active GLP-1 writers: 184
 - Total monthly GLP-1 Rx: 4,863 | Total NRx: 1,243
 - Average Rabivy propensity: 17/100
 - Tier breakdown: High 60 | Medium 141 | Watch 183
@@ -366,7 +366,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP13247 (Obesity Medicine) - 143 Rx/month, propensity 62/100, tier High
 
 ## North Dakota
-- HCP universe: 43 | Active GLP-1 writers: 21
+- HCP universe: 43 | Active GLP-1 writers: 20
 - Total monthly GLP-1 Rx: 371 | Total NRx: 99
 - Average Rabivy propensity: 15/100
 - Tier breakdown: High 7 | Medium 11 | Watch 25
@@ -377,7 +377,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP3192 (Endocrinology) - 32 Rx/month, propensity 10/100, tier Watch
 
 ## Ohio
-- HCP universe: 580 | Active GLP-1 writers: 261
+- HCP universe: 580 | Active GLP-1 writers: 252
 - Total monthly GLP-1 Rx: 6,587 | Total NRx: 1,692
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 78 | Medium 204 | Watch 298
@@ -399,7 +399,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP9468 (Obesity Medicine) - 125 Rx/month, propensity 47/100, tier High
 
 ## Oregon
-- HCP universe: 219 | Active GLP-1 writers: 112
+- HCP universe: 219 | Active GLP-1 writers: 108
 - Total monthly GLP-1 Rx: 2,475 | Total NRx: 721
 - Average Rabivy propensity: 18/100
 - Tier breakdown: High 36 | Medium 77 | Watch 106
@@ -410,7 +410,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP6277 (Obesity Medicine) - 96 Rx/month, propensity 79/100, tier High
 
 ## Pennsylvania
-- HCP universe: 707 | Active GLP-1 writers: 360
+- HCP universe: 707 | Active GLP-1 writers: 342
 - Total monthly GLP-1 Rx: 8,598 | Total NRx: 2,176
 - Average Rabivy propensity: 17/100
 - Tier breakdown: High 108 | Medium 249 | Watch 350
@@ -421,7 +421,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP2906 (Obesity Medicine) - 158 Rx/month, propensity 81/100, tier High
 
 ## Rhode Island
-- HCP universe: 86 | Active GLP-1 writers: 36
+- HCP universe: 86 | Active GLP-1 writers: 35
 - Total monthly GLP-1 Rx: 1,025 | Total NRx: 297
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 15 | Medium 24 | Watch 47
@@ -432,7 +432,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP14011 (Endocrinology) - 97 Rx/month, propensity 85/100, tier High
 
 ## South Carolina
-- HCP universe: 182 | Active GLP-1 writers: 98
+- HCP universe: 182 | Active GLP-1 writers: 96
 - Total monthly GLP-1 Rx: 2,147 | Total NRx: 597
 - Average Rabivy propensity: 17/100
 - Tier breakdown: High 25 | Medium 77 | Watch 80
@@ -443,7 +443,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP0979 (Obesity Medicine) - 107 Rx/month, propensity 62/100, tier High
 
 ## South Dakota
-- HCP universe: 30 | Active GLP-1 writers: 17
+- HCP universe: 30 | Active GLP-1 writers: 16
 - Total monthly GLP-1 Rx: 397 | Total NRx: 99
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 5 | Medium 10 | Watch 15
@@ -465,7 +465,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP6309 (Obesity Medicine) - 99 Rx/month, propensity 46/100, tier High
 
 ## Texas
-- HCP universe: 1,114 | Active GLP-1 writers: 576
+- HCP universe: 1,114 | Active GLP-1 writers: 563
 - Total monthly GLP-1 Rx: 14,774 | Total NRx: 3,797
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 172 | Medium 393 | Watch 549
@@ -476,7 +476,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP8359 (Obesity Medicine) - 171 Rx/month, propensity 67/100, tier High
 
 ## Utah
-- HCP universe: 150 | Active GLP-1 writers: 82
+- HCP universe: 150 | Active GLP-1 writers: 80
 - Total monthly GLP-1 Rx: 2,037 | Total NRx: 542
 - Average Rabivy propensity: 17/100
 - Tier breakdown: High 22 | Medium 60 | Watch 68
@@ -487,7 +487,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP3784 (Obesity Medicine) - 130 Rx/month, propensity 43/100, tier High
 
 ## Vermont
-- HCP universe: 44 | Active GLP-1 writers: 22
+- HCP universe: 44 | Active GLP-1 writers: 21
 - Total monthly GLP-1 Rx: 502 | Total NRx: 81
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 5 | Medium 17 | Watch 22
@@ -498,7 +498,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP5901 (Primary Care) - 45 Rx/month, propensity 19/100, tier Medium
 
 ## Virginia
-- HCP universe: 384 | Active GLP-1 writers: 203
+- HCP universe: 384 | Active GLP-1 writers: 195
 - Total monthly GLP-1 Rx: 5,199 | Total NRx: 1,192
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 60 | Medium 128 | Watch 196
@@ -509,7 +509,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP5255 (Obesity Medicine) - 118 Rx/month, propensity 71/100, tier High
 
 ## Washington
-- HCP universe: 333 | Active GLP-1 writers: 182
+- HCP universe: 333 | Active GLP-1 writers: 177
 - Total monthly GLP-1 Rx: 4,437 | Total NRx: 1,112
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 49 | Medium 113 | Watch 171
@@ -531,7 +531,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP3616 (Obesity Medicine) - 73 Rx/month, propensity 61/100, tier High
 
 ## Wisconsin
-- HCP universe: 250 | Active GLP-1 writers: 124
+- HCP universe: 250 | Active GLP-1 writers: 120
 - Total monthly GLP-1 Rx: 3,015 | Total NRx: 793
 - Average Rabivy propensity: 16/100
 - Tier breakdown: High 40 | Medium 76 | Watch 134
@@ -542,7 +542,7 @@ One section per state. 'Top prescribers' ranks by monthly GLP-1 Rx volume across
   3. HCP10497 (Obesity Medicine) - 113 Rx/month, propensity 40/100, tier High
 
 ## Wyoming
-- HCP universe: 24 | Active GLP-1 writers: 11
+- HCP universe: 24 | Active GLP-1 writers: 10
 - Total monthly GLP-1 Rx: 92 | Total NRx: 27
 - Average Rabivy propensity: 11/100
 - Tier breakdown: High 2 | Medium 7 | Watch 15
