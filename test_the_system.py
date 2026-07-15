@@ -66,10 +66,11 @@ TESTS = [
     {"q": "Which Novo-heavy prescribers in California have a high switching score?",
      "cat": "filtered targeting", "mode": "llm",
      "expect_engine": "STRUCTURED",
-     "note": "routes via the switching-score trigger; 'Novo-heavy' phrasing "
-             "isn't recognised by competitor detection yet (only literal "
-             "'novo nordisk'/brand names are) - dominant_competitor filter "
-             "won't actually apply here even though routing is correct"},
+     "note": "'Novo-heavy' now correctly maps to the Novo Nordisk competitor "
+             "filter (short form 'novo' was missing from the keyword list - "
+             "'lilly' already worked as a short form, 'novo' didn't). Both "
+             "the competitor and switching-score filters now genuinely "
+             "apply. Multi-field parsing into the filter still needs the LLM."},
     {"q": "Find high-volume writers in Illinois with a preferred formulary status.",
      "cat": "filtered targeting", "mode": "llm",
      "expect_engine": "STRUCTURED",

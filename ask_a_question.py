@@ -90,7 +90,7 @@ TIER_PATTERNS = [
 COMPETITOR_KEYWORDS = {
     "novo_nordisk": {"words": ["semaglutide", "ozempic", "wegovy", "novo nordisk", "novo"],
                      "label": "Novo Nordisk"},
-    "eli_lilly": {"words": ["tirzepatide", "mounjaro", "zepbound", "eli lilly", "lilly", "eli", "Eli"],
+    "eli_lilly": {"words": ["tirzepatide", "mounjaro", "zepbound", "eli lilly", "lilly", "Eli", "eli"],
                   "label": "Eli Lilly"},
 }
 
@@ -476,7 +476,7 @@ def ask(question):
             specialty = card_chunk.get("specialty") or None
         benchmark_query = (f"typical {specialty} benchmark profile" if specialty
                             else "typical specialty benchmark profile")
-        _, benchmark_results = search_documents.search(benchmark_query, top_k=2)
+        _, benchmark_results = search_documents.search(benchmark_query, top_k=1)
         combined = card_results + benchmark_results
         low_confidence = not combined
         return "RAG", {
