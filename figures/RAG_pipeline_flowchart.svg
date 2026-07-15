@@ -1,0 +1,118 @@
+<svg viewBox="0 0 1400 1080" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#B5AFEB"/>
+  </marker>
+  <marker id="arrowOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#E8A33D"/>
+  </marker>
+</defs>
+<rect x="0" y="0" width="1400" height="1080" fill="#FFFFFF"/>
+<text x="40" y="42" font-size="24" font-weight="700" fill="#3D3870">How a Question Gets Answered</text>
+<text x="40" y="64" font-size="13" fill="#7F77DD">The retrieval layer, file by file - everything here happens before any AI writes a sentence</text>
+<rect x="170" y="110" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="170" y="110" width="220" height="6" fill="#7F77DD"/>
+<circle cx="390" cy="110" r="18" fill="#7F77DD"/>
+<text x="390" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="182" y="156" font-size="13.5" font-weight="700" fill="#3D3870">main.py</text>
+<text x="182" y="170" font-size="11" fill="#5A52B8">Runs the build steps below, in</text>
+<text x="182" y="186" font-size="11" fill="#5A52B8">order, and checks each one</text>
+<text x="182" y="202" font-size="11" fill="#5A52B8">actually worked before continuing.</text>
+<text x="182" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: rerun whenever source</text>
+<text x="182" y="242" font-size="10" font-style="italic" fill="#A85D12">documents or the spreadsheet change</text>
+<line x1="390" y1="190" x2="430" y2="190" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="430" y="110" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="430" y="110" width="220" height="6" fill="#7F77DD"/>
+<circle cx="650" cy="110" r="18" fill="#7F77DD"/>
+<text x="650" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<text x="442" y="156" font-size="13.5" font-weight="700" fill="#3D3870">1_chunk_documents.py</text>
+<text x="442" y="170" font-size="11" fill="#5A52B8">Splits every source document into</text>
+<text x="442" y="186" font-size="11" fill="#5A52B8">small, labeled, searchable pieces</text>
+<text x="442" y="202" font-size="11" fill="#5A52B8">- one per section or HCP card.</text>
+<text x="442" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: NPI must be exactly 10</text>
+<text x="442" y="242" font-size="10" font-style="italic" fill="#A85D12">digits, or that card can't be found</text>
+<line x1="650" y1="190" x2="690" y2="190" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="690" y="110" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="690" y="110" width="220" height="6" fill="#7F77DD"/>
+<circle cx="910" cy="110" r="18" fill="#7F77DD"/>
+<text x="910" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">3</text>
+<text x="702" y="156" font-size="13.5" font-weight="700" fill="#3D3870">2_tag_chunks.py</text>
+<text x="702" y="170" font-size="11" fill="#5A52B8">Adds extra labels to each piece -</text>
+<text x="702" y="186" font-size="11" fill="#5A52B8">which competitor or brand it</text>
+<text x="702" y="202" font-size="11" fill="#5A52B8">mentions, if any.</text>
+<text x="702" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: whole-word matching only</text>
+<text x="702" y="242" font-size="10" font-style="italic" fill="#A85D12">(avoids false hits like ‘Lillyanne’)</text>
+<line x1="910" y1="190" x2="950" y2="190" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="950" y="110" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="950" y="110" width="220" height="6" fill="#7F77DD"/>
+<circle cx="1170" cy="110" r="18" fill="#7F77DD"/>
+<text x="1170" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">4</text>
+<text x="962" y="156" font-size="13.5" font-weight="700" fill="#3D3870">3_create_embeddings.py</text>
+<text x="962" y="170" font-size="11" fill="#5A52B8">Converts each labeled piece into a</text>
+<text x="962" y="186" font-size="11" fill="#5A52B8">list of numbers capturing its</text>
+<text x="962" y="202" font-size="11" fill="#5A52B8">meaning - for search-by-meaning.</text>
+<text x="962" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: downloads a small AI model</text>
+<text x="962" y="242" font-size="10" font-style="italic" fill="#A85D12">(~90MB) - needs internet once</text>
+<line x1="1060.0" y1="280" x2="1060.0" y2="370" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="950" y="380" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="950" y="380" width="220" height="6" fill="#7F77DD"/>
+<circle cx="1170" cy="380" r="18" fill="#7F77DD"/>
+<text x="1170" y="385" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">5</text>
+<text x="962" y="426" font-size="13.5" font-weight="700" fill="#3D3870">output/ folder</text>
+<text x="962" y="440" font-size="11" fill="#5A52B8">What main.py actually produces -</text>
+<text x="962" y="456" font-size="11" fill="#5A52B8">a saved, ready-to-search copy of</text>
+<text x="962" y="472" font-size="11" fill="#5A52B8">every document.</text>
+<text x="962" y="497" font-size="10" font-style="italic" fill="#A85D12">Watch: only search_documents.py</text>
+<text x="962" y="512" font-size="10" font-style="italic" fill="#A85D12">reads from here - nothing else does</text>
+<line x1="950" y1="460" x2="910" y2="460" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="690" y="380" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="690" y="380" width="220" height="6" fill="#7F77DD"/>
+<circle cx="910" cy="380" r="18" fill="#7F77DD"/>
+<text x="910" y="385" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">6</text>
+<text x="702" y="426" font-size="13.5" font-weight="700" fill="#3D3870">search_documents.py</text>
+<text x="702" y="440" font-size="11" fill="#5A52B8">The document search engine.</text>
+<text x="702" y="456" font-size="11" fill="#5A52B8">Finds the most relevant chunks</text>
+<text x="702" y="472" font-size="11" fill="#5A52B8">for a narrative question.</text>
+<text x="702" y="497" font-size="10" font-style="italic" fill="#A85D12">Watch: needs the build steps run</text>
+<text x="702" y="512" font-size="10" font-style="italic" fill="#A85D12">first, or there is nothing to search</text>
+<rect x="430" y="380" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="430" y="380" width="220" height="6" fill="#7F77DD"/>
+<circle cx="650" cy="380" r="18" fill="#7F77DD"/>
+<text x="650" y="385" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">7</text>
+<text x="442" y="426" font-size="13.5" font-weight="700" fill="#3D3870">query_spreadsheet.py</text>
+<text x="442" y="440" font-size="11" fill="#5A52B8">The structured query engine.</text>
+<text x="442" y="456" font-size="11" fill="#5A52B8">Looks up ranking / counting /</text>
+<text x="442" y="472" font-size="11" fill="#5A52B8">filtering questions directly.</text>
+<text x="442" y="497" font-size="10" font-style="italic" fill="#A85D12">Watch: always loads the most</text>
+<text x="442" y="512" font-size="10" font-style="italic" fill="#A85D12">recently dated spreadsheet file</text>
+<rect x="170" y="437" width="220" height="56" rx="28.0" fill="#5A52B8"/>
+<text x="280.0" y="462.0" font-size="11.5" fill="#FFFFFF" text-anchor="middle">Master spreadsheet</text>
+<text x="280.0" y="477.0" font-size="11.5" fill="#FFFFFF" text-anchor="middle">(data/*.xlsx - separate from main.py)</text>
+<line x1="390" y1="465.0" x2="430" y2="490" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<line x1="540.0" y1="550" x2="645.0" y2="650" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<line x1="800.0" y1="550" x2="755.0" y2="650" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="590.0" y="650" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="590.0" y="650" width="220" height="6" fill="#7F77DD"/>
+<circle cx="810.0" cy="650" r="18" fill="#7F77DD"/>
+<text x="810.0" y="655" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">8</text>
+<text x="602.0" y="696" font-size="13.5" font-weight="700" fill="#3D3870">ask_a_question.py</text>
+<text x="602.0" y="710" font-size="11" fill="#5A52B8">THE ROUTER. Reads a question,</text>
+<text x="602.0" y="726" font-size="11" fill="#5A52B8">decides which engine(s) it needs,</text>
+<text x="602.0" y="742" font-size="11" fill="#5A52B8">calls them, returns the answer.</text>
+<text x="602.0" y="767" font-size="10" font-style="italic" fill="#A85D12">Watch: the only file you run</text>
+<text x="602.0" y="782" font-size="10" font-style="italic" fill="#A85D12">yourself to actually ask something</text>
+<line x1="810.0" y1="730" x2="850.0" y2="730" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<rect x="850.0" y="650" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="850.0" y="650" width="220" height="6" fill="#7F77DD"/>
+<circle cx="1070.0" cy="650" r="18" fill="#7F77DD"/>
+<text x="1070.0" y="655" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">9</text>
+<text x="862.0" y="696" font-size="13.5" font-weight="700" fill="#3D3870">test_the_system.py</text>
+<text x="862.0" y="710" font-size="11" fill="#5A52B8">Runs a batch of real questions</text>
+<text x="862.0" y="726" font-size="11" fill="#5A52B8">through the router automatically</text>
+<text x="862.0" y="742" font-size="11" fill="#5A52B8">and reports what passed or failed.</text>
+<text x="862.0" y="767" font-size="10" font-style="italic" fill="#A85D12">Watch: runs before the AI writes</text>
+<text x="862.0" y="782" font-size="10" font-style="italic" fill="#A85D12">anything - this only checks routing</text>
+<path d="M960.0,820 V865 H700.0 V820" fill="none" stroke="#E8A33D" stroke-width="2.5" stroke-dasharray="7,5" marker-end="url(#arrowOrange)"/>
+<text x="830.0" y="885" font-size="11.5" font-style="italic" fill="#3D3870" text-anchor="middle">sends ~25 real questions through the router above, automatically</text>
+<text x="40" y="920" font-size="12" fill="#5A52B8">Not shown here: the AI-writing step that turns a correct answer into a full sentence - that is a separate, later piece.</text>
+</svg>

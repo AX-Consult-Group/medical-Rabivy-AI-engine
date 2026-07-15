@@ -1,10 +1,10 @@
 # main.py
 # -------------------------------------------------------------------
 # Orchestrator: runs the pipeline stages in order, each feeding the next.
-#   chunk.py -> tag.py -> embed.py -> (structured.py sanity check)
+#   1_chunk_documents.py -> 2_tag_chunks.py -> 3_create_embeddings.py -> (query_spreadsheet.py sanity check)
 # Run this one file to rebuild the whole knowledge base from scratch.
-# (search.py, ask.py, and eval_full.py are run separately, once the
-# base is built.)
+# (search_documents.py, ask_a_question.py, and test_the_system.py are
+# run separately, once the base is built.)
 #
 # Scope note: this rebuilds the RAG side (chunk/tag/embed). It does not
 # regenerate the propensity master spreadsheet or the ground-truth eval
@@ -23,17 +23,17 @@ import time
 # docs/ matched nothing).
 STAGES = [
     {
-        "script": "chunk.py",
+        "script": "1_chunk_documents.py",
         "check_path": "output/chunks.json",
         "min_size": 100,
     },
     {
-        "script": "tag.py",
+        "script": "2_tag_chunks.py",
         "check_path": "output/chunks_tagged.json",
         "min_size": 100,
     },
     {
-        "script": "embed.py",
+        "script": "3_create_embeddings.py",
         "check_path": "output/embeddings.npy",
         "min_size": 100,
     },
@@ -62,10 +62,11 @@ for stage in STAGES:
     print(f"\n>>> Running {script} ...")
     start = time.time()
     # Run the stage as its own script; stop everything if one fails.
-    # subprocess.run (not import) is deliberate: chunk.py/tag.py/embed.py
-    # are top-level scripts, not wrapped in functions, so importing them
-    # would run their code anyway while tangling namespaces together and
-    # making a failure in one script harder to isolate from the next.
+    # subprocess.run (not import) is deliberate: 1_chunk_documents.py /
+    # 2_tag_chunks.py / 3_create_embeddings.py are top-level scripts,
+    # not wrapped in functions, so importing them would run their code
+    # anyway while tangling namespaces together and making a failure in
+    # one script harder to isolate from the next.
     result = subprocess.run([sys.executable, script])
     if result.returncode != 0:
         print(f"\n!!! {script} failed (exit code {result.returncode}). Pipeline stopped.")
@@ -75,26 +76,27 @@ for stage in STAGES:
     print(f">>> {script} done in {time.time() - start:.1f}s - "
           f"{stage['check_path']} looks present and non-trivial.")
 
-# ---- Final sanity check: does structured.py's data path still load? ----
-# structured.py isn't part of this rebuild (it's a separate data source,
-# the propensity spreadsheet, not chunked/tagged/embedded content) - but
-# since it loads a dated Excel filename via glob, it's cheap to confirm
-# here that it still resolves and loads cleanly, rather than discovering
-# a broken path later when someone runs ask.py by hand.
-print("\n>>> Checking structured.py's data path ...")
+# ---- Final sanity check: does query_spreadsheet.py's data path still load? ----
+# query_spreadsheet.py isn't part of this rebuild (it's a separate data
+# source, the propensity spreadsheet, not chunked/tagged/embedded
+# content) - but since it loads a dated Excel filename via glob, it's
+# cheap to confirm here that it still resolves and loads cleanly,
+# rather than discovering a broken path later when someone runs
+# ask_a_question.py by hand.
+print("\n>>> Checking query_spreadsheet.py's data path ...")
 start = time.time()
 check = subprocess.run(
-    [sys.executable, "-c", "import structured; print('OK:', structured._DATA_PATH)"],
+    [sys.executable, "-c", "import query_spreadsheet; print('OK:', query_spreadsheet._DATA_PATH)"],
     capture_output=True, text=True,
 )
 if check.returncode != 0:
-    print("!!! structured.py failed to load its data file:")
+    print("!!! query_spreadsheet.py failed to load its data file:")
     print(check.stderr)
     sys.exit(1)
 print(f">>> {check.stdout.strip()} ({time.time() - start:.1f}s)")
 
 print("\n" + "=" * 60)
 print("Pipeline complete. Knowledge base is ready.")
-print("Run 'python search.py' or 'python ask.py' to query it, "
-      "or 'python eval_full.py' to test it.")
+print("Run 'python search_documents.py' or 'python ask_a_question.py' to query it, "
+      "or 'python test_the_system.py' to test it.")
 print("=" * 60)
