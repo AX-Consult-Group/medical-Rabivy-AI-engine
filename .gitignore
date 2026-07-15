@@ -1,4 +1,4 @@
 output/
 __pycache__/
 *.pyc
-docs/hcp_snapshots/
+eval_runs/
