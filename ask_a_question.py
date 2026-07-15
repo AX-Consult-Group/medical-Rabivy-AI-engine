@@ -90,7 +90,7 @@ TIER_PATTERNS = [
 COMPETITOR_KEYWORDS = {
     "novo_nordisk": {"words": ["semaglutide", "ozempic", "wegovy", "novo nordisk", "novo"],
                      "label": "Novo Nordisk"},
-    "eli_lilly": {"words": ["tirzepatide", "mounjaro", "zepbound", "eli lilly", "lilly", "Eli", "eli"],
+    "eli_lilly": {"words": ["tirzepatide", "mounjaro", "zepbound", "eli lilly", "lilly", "eli"],
                   "label": "Eli Lilly"},
 }
 
@@ -129,7 +129,10 @@ def _has_hcp_context(ql):
 # recognized as a trigger before.
 _FORWARD_TARGET_PATTERN = re.compile(
     r"\bwho should i target\b|\bwho (?:should|do|would) i target\b|"
-    r"\bwho to target\b|\bbest targets?\b|\bwho are (?:my|the) targets?\b")
+    r"\bwho to target\b|\bbest targets?\b|\bwho are (?:my|the) targets?\b|"
+    r"\bwho(?:m)? should i prioriti[sz]e\b|"
+    r"\bwhich (?:hcps?|prescribers?|writers?|doctors?) should i prioriti[sz]e\b|"
+    r"\bshould i prioriti[sz]e\b|\bwho should i focus on\b")
 
 # Guard against the Q20 multi-source showpiece case: "who should I
 # target ... AND WHAT SHOULD I SAY TO THEM" contains "who should I
@@ -142,7 +145,9 @@ _MESSAGING_WORDS = re.compile(r"what (?:should i|to) say|messaging|talking point
 
 
 def _is_forward_targeting_question(ql):
-    return bool(_FORWARD_TARGET_PATTERN.search(ql)) and not _MESSAGING_WORDS.search(ql)
+    return (bool(_FORWARD_TARGET_PATTERN.search(ql))
+            and not _MESSAGING_WORDS.search(ql)
+            and _has_hcp_context(ql))
 
 
 # Default result-list size when the question doesn't say. 20 is a
