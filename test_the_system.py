@@ -163,9 +163,12 @@ TESTS = [
      "cat": "multi-source showpiece", "mode": "llm",
      "expect_engine": "RAG",
      "note": "the showpiece: joins targeting + messaging - pure LLM synthesis. "
-             "'target' (present tense) isn't caught by the targeted-detection "
-             "regex (which looks for 'targeted'), so this correctly falls to "
-             "RAG rather than a half-relevant structured filter"},
+             "'who should I target' is now recognised (routes plain targeting "
+             "questions to STRUCTURED), but this question ALSO asks 'what "
+             "should I say to them' - a deliberate guard backs off the "
+             "structured trigger when messaging language is present, so this "
+             "correctly still falls to RAG instead of silently dropping the "
+             "messaging half of the question"},
 ]
 
 # Previously tracked here as a known gap: "Why do patients stop taking

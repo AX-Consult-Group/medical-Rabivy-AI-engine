@@ -119,6 +119,32 @@ def _has_hcp_context(ql):
     return any(w in ql for w in HCP_CONTEXT_WORDS) or _detect_specialty(ql) is not None
 
 
+# Forward-looking targeting language ("who should I target", "best
+# targets") - deliberately separate from _detect_targeted() above,
+# which only catches past-tense/status language ("already targeted",
+# "not targeted"). "Who should I target" is a genuinely different
+# question: it's asking for a propensity-ranked shortlist, which the
+# structured engine can already answer today (state/specialty/tier
+# filters + the default propensity_score sort) - it just wasn't being
+# recognized as a trigger before.
+_FORWARD_TARGET_PATTERN = re.compile(
+    r"\bwho should i target\b|\bwho (?:should|do|would) i target\b|"
+    r"\bwho to target\b|\bbest targets?\b|\bwho are (?:my|the) targets?\b")
+
+# Guard against the Q20 multi-source showpiece case: "who should I
+# target ... AND WHAT SHOULD I SAY TO THEM" contains "who should I
+# target" too, but that combined question needs the LLM to join
+# targeting data with messaging guidance - it should still fall to RAG,
+# not get silently reduced to a plain structured filter that drops the
+# messaging half entirely. Only fire the new trigger when there's no
+# messaging language riding along with it.
+_MESSAGING_WORDS = re.compile(r"what (?:should i|to) say|messaging|talking points")
+
+
+def _is_forward_targeting_question(ql):
+    return bool(_FORWARD_TARGET_PATTERN.search(ql)) and not _MESSAGING_WORDS.search(ql)
+
+
 # Default result-list size when the question doesn't say. 20 is a
 # working compromise: generous enough that narrow filters (state +
 # specialty + tier + targeted) almost never get silently cut short,
@@ -406,8 +432,10 @@ def ask(question):
     sample_signal = sample_request is not None and _has_hcp_context(ql)
     pa_burden_signal = (min_pa_burden is not None or max_pa_burden is not None) and _has_hcp_context(ql)
     extra_signal = bool(extra_filters) and _has_hcp_context(ql)
+    forward_target_signal = _is_forward_targeting_question(ql)
     if (targeted is not None or competitor_signal or min_switching is not None
-            or formulary_signal or sample_signal or pa_burden_signal or extra_signal):
+            or formulary_signal or sample_signal or pa_burden_signal or extra_signal
+            or forward_target_signal):
         # Default 20 if unspecified; "top 30" or "all"/"every" override it.
         # See _resolve_top() - one shared policy, not duplicated per path.
         return "STRUCTURED / filter", query_spreadsheet.filter_hcps(
