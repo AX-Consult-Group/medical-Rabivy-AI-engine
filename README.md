@@ -104,6 +104,34 @@ Retrieval accuracy is tested against a set of questions with known correct answe
 
 ---
 
+### Implementation Reference: Build Scripts vs. Tool Scripts
+
+**Figure 1: How the various files work together**
+
+![How a question gets answered](figures/RAG_pipeline_flowchart.svg)
+ 
+The current codebase implementing Phase 4 is organized into two categories of scripts, each with a different execution model. This section maps the phases above to the actual files.
+ 
+#### Build scripts (run once, in order, produce output)
+ 
+These scripts process the knowledge base and save their results to disk. Each one depends on the previous step's output, so they must run in this exact sequence:
+ 
+1. **`1_chunk_documents.py`** - splits source documents into labeled, retrievable segments (Phase 4.2, chunking)
+2. **`2_tag_chunks.py`** - adds metadata tags such as competitor and brand mentions to each segment (Phase 4.2, metadata tagging)
+3. **`3_create_embeddings.py`** - converts each tagged segment into a vector representation for semantic search (Phase 4.2, embedding)
+**`main.py`** runs all three automatically, in the correct order, checking after each step that it actually produced valid output before continuing. This is the one file that should be run to rebuild the knowledge base after the source documents or master spreadsheet change.
+ 
+#### Tool scripts (run on demand, answer one question at a time)
+ 
+These scripts do not produce new output on disk. Each one answers a specific question when called:
+ 
+- **`query_spreadsheet.py`** - the structured query engine (Phase 4.1). Looks up ranking, counting, and filtering questions directly against the master spreadsheet.
+- **`search_documents.py`** - the document search engine (Phase 4.2). Retrieves the most relevant document segments for a given narrative question.
+- **`ask_a_question.py`** - the query router (Phase 4.3). Determines whether a question needs the structured engine, the document engine, or both, and returns the answer.
+- **`test_the_system.py`** (Phase 4.6) is a partial exception: rather than requiring a specific question, it runs a fixed bank of real test questions through the router automatically and reports whether each one succeeded. It is currently run as a separate, explicit step after `main.py`, to confirm the rebuilt knowledge base is working correctly end to end.
+
+---
+
 ## Phase 5: AI Evaluation Layer
 
 A governance layer that validates system outputs on an ongoing basis, not only at launch.
