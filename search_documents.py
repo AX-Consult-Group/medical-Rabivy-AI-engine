@@ -22,12 +22,14 @@
 import json
 import re
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from embedding_backend import get_query_backend
 
 with open("output/chunks_tagged.json", "r", encoding="utf-8") as f:
     chunks = json.load(f)
 embeddings = np.load("output/embeddings.npy")
-model = SentenceTransformer("all-MiniLM-L6-v2")
+# Load whichever backend embedding_meta.json says built the store
+# (MiniLM normally; the offline TF-IDF/LSA fallback in sandboxes).
+model = get_query_backend()
 chunk_norms = embeddings / np.linalg.norm(embeddings, axis=1, keepdims=True)
 
 # Helpers built once.
