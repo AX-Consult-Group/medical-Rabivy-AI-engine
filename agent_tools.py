@@ -40,8 +40,13 @@ def _trim_row(row):
             v = row[f]
             if isinstance(v, (np.integer,)):
                 v = int(v)
-            elif isinstance(v, (np.floating,)):
-                v = round(float(v), 4)
+            elif isinstance(v, (float, np.floating)):
+                # Round EVERY float (plain Python floats included - pandas
+                # to_dict() can hand back either). 3 decimals is plenty of
+                # precision for scores; long float tails also made the
+                # verification auditor flag honest rounding in answers as
+                # mismatches against the raw evidence.
+                v = round(float(v), 3)
             elif isinstance(v, (np.bool_,)):
                 v = bool(v)
             elif hasattr(v, "item"):  # any other numpy scalar

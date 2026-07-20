@@ -30,6 +30,7 @@
 
 import json
 import os
+import sys
 import time
 
 from agent import RabivyAgent
@@ -150,7 +151,7 @@ def _contains(haystack, expected):
 
 def _evidence_text(result):
     """Full tool results (not just the one-line digests) - a fact check
-    against a digest would miss facts that were genuinely retrieved."""
+    against a digest would miss facts that were in fact retrieved."""
     return json.dumps(result["evidence"], default=str).lower()
 
 
@@ -254,4 +255,8 @@ def run():
 
 
 if __name__ == "__main__":
-    run()
+    tally = run()
+    # Proper exit code so CI (and any script) can gate on this eval:
+    # FAIL or CRASH -> nonzero. WEAK is reported but tolerated - it
+    # usually reflects retrieval-quality variance, not broken machinery.
+    sys.exit(1 if (tally.get("FAIL", 0) + tally.get("CRASH", 0)) > 0 else 0)

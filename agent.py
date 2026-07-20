@@ -9,8 +9,8 @@
 #   ------------------------------   --------------------------------
 #   regex keyword router             LLM plans which tool(s) to call
 #   one engine per question          multi-step: chains several calls
-#   can't combine sources            multi-source synthesis (the Q20
-#                                    showpiece: targeting + messaging)
+#   can't combine sources            multi-source synthesis (targeting
+#                                    + messaging in a single answer)
 #   returns raw data                 writes a grounded, cited answer
 #   no retry on weak retrieval       self-correction: rewrites the
 #                                    query when retrieval comes back
@@ -74,9 +74,20 @@ Check every factual claim in the answer:
 - unsupported: the claim does NOT appear in the evidence (invented/hallucinated)
 - contradicted: the evidence says something different
 
-Respond with ONLY a JSON object, no other text:
+The following are SUPPORTED, never issues (do not flag them):
+- rounding and formatting AT ANY PRECISION, including to whole percentages (0.610666 -> 0.61; 0.85 -> "85/100"; 0.3225 -> "32%"; 0.6362 -> "64%")
+- simple arithmetic derived from the evidence (totals, differences, "10 of 11", rank ordering of listed values)
+- paraphrase and interpretation that follows from the evidence (e.g. "overdue for contact" when days_since_contact is large)
+
+Data dictionary (treat these as definitions, not claims to verify): propensity_score is 0-1, often displayed as N/100; propensity_rank is a NATIONAL rank across all 15,000 HCPs; tier values are High/Medium/Low/Watch; switching_score and pa_burden are 0-1.
+
+Respond with ONLY a JSON object and NOTHING after it - no commentary before or after:
 {"verdict": "pass" | "fail", "issues": ["<each unsupported or contradicted claim, quoted, with why>"], "notes": "<one line>"}
-"verdict" is "fail" if ANY claim is unsupported or contradicted. Unanswered parts of the question are an issue too."""
+
+Rules for the issues list:
+- List ONLY claims that are unsupported or contradicted. NEVER list a supported claim, even with commentary - if a claim matches the evidence, it does not belong in issues at all.
+- "verdict" is "fail" if and only if issues is non-empty. Empty issues -> "pass". Unanswered parts of the question count as an issue.
+- Before adding an issue, re-read the evidence once more; if the claim is actually there (allowing rounding/paraphrase per above), do not add it."""
 
 
 class RabivyAgent:
@@ -102,33 +113,7 @@ class RabivyAgent:
         steps = []
 
         # ---- THE AGENT LOOP: plan -> act -> observe -> repeat ----
-        for _ in range(MAX_STEPS):
-            resp = self.llm.complete(SYSTEM_PROMPT, self.history, tools=TOOL_SCHEMAS)
-            tool_calls = [b for b in resp["content"] if b.get("type") == "tool_use"]
-
-            if resp["stop_reason"] != "tool_use" or not tool_calls:
-                answer = "".join(b.get("text", "") for b in resp["content"]
-                                 if b.get("type") == "text").strip()
-                break
-
-            # Record the assistant's plan turn, run every requested tool,
-            # feed all results back in one user turn (Anthropic protocol).
-            self.history.append({"role": "assistant", "content": resp["content"]})
-            results_block = []
-            for call in tool_calls:
-                self._log(f"  -> tool: {call['name']}({json.dumps(call['input'])[:120]})")
-                result = run_tool(call["name"], call["input"])
-                evidence.append({"tool": call["name"], "input": call["input"],
-                                 "result": result})
-                steps.append({"tool": call["name"], "input": call["input"],
-                              "result_digest": self._digest(result)})
-                results_block.append({"type": "tool_result",
-                                      "tool_use_id": call["id"],
-                                      "content": json.dumps(result)})
-            self.history.append({"role": "user", "content": results_block})
-        else:
-            answer = ("I hit my step limit before finishing this question - "
-                      "here is what I found so far, treat it as incomplete.")
+        answer = self._run_loop(evidence, steps)
 
         # ---- VERIFICATION PASS: audit the draft against the evidence ----
         verification = {"verdict": "not_checked", "issues": []}
@@ -145,11 +130,15 @@ class RabivyAgent:
                     + json.dumps(verification["issues"], indent=2)
                     + "\nRewrite the answer using ONLY facts present in the tool "
                       "results above. Remove or correct every flagged claim. If "
-                      "part of the question genuinely can't be answered from the "
+                      "part of the question cannot be answered from the "
                       "evidence, say so plainly."})
-                resp = self.llm.complete(SYSTEM_PROMPT, self.history, tools=TOOL_SCHEMAS)
-                revised_answer = "".join(b.get("text", "") for b in resp["content"]
-                                         if b.get("type") == "text").strip()
+                # The rewrite goes through the SAME tool loop as the
+                # original answer - a revising model often (correctly)
+                # wants to re-query a tool to fix a flagged number, and
+                # a plain text-only completion here would capture only
+                # its "I'll rewrite..." preamble instead of the actual
+                # revised answer (defect originally caught in UI testing).
+                revised_answer = self._run_loop(evidence, steps)
                 if revised_answer:
                     answer = revised_answer
                     revised = True
@@ -163,6 +152,37 @@ class RabivyAgent:
                 "verification": verification, "revised": revised}
 
     # ------------------------------------------------------------------
+    def _run_loop(self, evidence, steps):
+        """The plan -> act -> observe loop, from the current history to a
+        final text. Used for both the initial answer and post-audit
+        revisions, so both may call tools."""
+        for _ in range(MAX_STEPS):
+            resp = self.llm.complete(SYSTEM_PROMPT, self.history, tools=TOOL_SCHEMAS)
+            tool_calls = [b for b in resp["content"] if b.get("type") == "tool_use"]
+
+            if resp["stop_reason"] != "tool_use" or not tool_calls:
+                return "".join(b.get("text", "") for b in resp["content"]
+                               if b.get("type") == "text").strip()
+
+            # Record the assistant's plan turn, run every requested tool,
+            # feed all results back in one user turn (Anthropic protocol).
+            self.history.append({"role": "assistant", "content": resp["content"]})
+            results_block = []
+            for call in tool_calls:
+                self._log(f"  -> tool: {call['name']}({json.dumps(call['input'])[:120]})")
+                result = run_tool(call["name"], call["input"])
+                evidence.append({"tool": call["name"], "input": call["input"],
+                                 "result": result})
+                steps.append({"tool": call["name"], "input": call["input"],
+                              "result_digest": self._digest(result)})
+                results_block.append({"type": "tool_result",
+                                      "tool_use_id": call["id"],
+                                      "content": json.dumps(result)})
+            self.history.append({"role": "user", "content": results_block})
+        return ("I hit my step limit before finishing this question - "
+                "here is what I found so far, treat it as incomplete.")
+
+    # ------------------------------------------------------------------
     def _verify(self, question, answer, evidence):
         """Second, independent LLM pass: audit the answer against the raw
         tool results. Independent = fresh context, no system prompt telling
@@ -173,13 +193,38 @@ class RabivyAgent:
         try:
             resp = self.llm.complete(VERIFY_SYSTEM,
                                      [{"role": "user", "content": prompt}],
-                                     tools=None, max_tokens=800)
+                                     tools=None, max_tokens=800,
+                                     temperature=0.0)  # audits should be maximally deterministic
             text = "".join(b.get("text", "") for b in resp["content"]
                            if b.get("type") == "text")
-            m = text[text.index("{"): text.rindex("}") + 1]
-            return json.loads(m)
+            parsed = self._extract_json(text)
+            if parsed is None:
+                return {"verdict": "audit_error",
+                        "issues": [f"auditor returned unparseable output: {text[:200]}"]}
+            return parsed
         except Exception as e:
             return {"verdict": "audit_error", "issues": [f"{type(e).__name__}: {e}"]}
+
+    @staticmethod
+    def _extract_json(text):
+        """Pull the first valid JSON object out of the auditor's reply,
+        tolerating stray text before/after it (a real failure mode seen
+        in live runs: 'JSONDecodeError: Extra data')."""
+        start = text.find("{")
+        while start != -1:
+            depth = 0
+            for i in range(start, len(text)):
+                if text[i] == "{":
+                    depth += 1
+                elif text[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        try:
+                            return json.loads(text[start:i + 1])
+                        except json.JSONDecodeError:
+                            break  # malformed - try the next '{'
+            start = text.find("{", start + 1)
+        return None
 
     # ------------------------------------------------------------------
     @staticmethod

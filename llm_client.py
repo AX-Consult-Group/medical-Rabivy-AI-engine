@@ -39,11 +39,14 @@ class AnthropicLLM:
         self.model = model
         self._client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY
 
-    def complete(self, system, messages, tools=None, max_tokens=2000):
+    def complete(self, system, messages, tools=None, max_tokens=2000,
+                 temperature=None):
         kwargs = dict(model=self.model, system=system, messages=messages,
                       max_tokens=max_tokens)
         if tools:
             kwargs["tools"] = tools
+        if temperature is not None:
+            kwargs["temperature"] = temperature
         resp = self._client.messages.create(**kwargs)
         return {
             "stop_reason": resp.stop_reason,
@@ -65,7 +68,8 @@ class AnthropicLLM:
 class MockLLM:
     name = "mock"
 
-    def complete(self, system, messages, tools=None, max_tokens=2000):
+    def complete(self, system, messages, tools=None, max_tokens=2000,
+                 temperature=None):
         # A call with no tools is a plain-completion call (the agent
         # uses those for answer verification) -> return a canned verdict.
         if not tools:
@@ -169,7 +173,8 @@ class MockLLM:
                                  "states with the most", "states have the most")):
             return [("states_summary", {})]
 
-        # Structured filter/ranking signals (same signal set as her router).
+        # Structured filter/ranking signals (same signal set as the
+        # baseline router in ask_a_question.py).
         targeted = aq._detect_targeted(ql)
         competitor = aq._detect_competitor(ql)
         min_switching = aq._detect_min_switching(ql)
@@ -204,7 +209,7 @@ class MockLLM:
             top = aq._resolve_top(ql)
             if top is not None: table_input["top"] = min(top, 10)
             plan.append(("query_hcp_table", table_input))
-            # Multi-part showpiece: also fetch the messaging guidance.
+            # Multi-part question: also fetch the messaging guidance.
             if multi_part:
                 plan.append(("search_documents",
                              {"query": "recommended messaging talking points by segment",
