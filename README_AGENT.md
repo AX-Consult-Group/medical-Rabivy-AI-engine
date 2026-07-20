@@ -1,54 +1,102 @@
-# The Agentic Layer (Phases 5–6)
+# Agentic Layer
 
-This adds an **agentic layer** on top of the existing retrieval system —
-the "AI Evaluation Layer" and "Conversational Interface" phases from the
-main README, built as one coherent agent. The two retrieval engines are
-untouched: the agent *uses* them as tools. What gets replaced is the
-regex **router** (`ask_a_question.py`), which still works standalone and
-remains the no-LLM baseline.
+This layer completes Phases 5 and 6 of the project scope: an LLM agent that
+plans and executes multi-step tool use over the two retrieval engines, an
+evaluation harness with CI integration, and a conversational interface.
 
-All data remains synthetic/fictional (Rabivy and AX Pharmaceuticals are
-fictional — see the main README's disclaimer).
+The retrieval engines themselves are unchanged. The agent consumes them as
+tools. The original keyword router (`ask_a_question.py`) remains in the repo
+as a no-LLM baseline.
 
-## What the agent adds
+All data is synthetic. Rabivy and AX Pharmaceuticals are fictional (see the
+disclaimer in the main README).
 
-| Capability | Where | What it means |
-|---|---|---|
-| LLM tool planning | `agent.py` + `agent_tools.py` | The model decides which engine(s) to call, with what parameters — no more keyword regexes deciding routing |
-| Multi-step chaining | `agent.py` loop | "Compare NPI X to a typical endocrinologist" = lookup + benchmark retrieval + synthesis, in one turn |
-| Multi-source synthesis | `agent.py` | The Q20 showpiece works: "who should I target **and** what should I say" joins the propensity table and the messaging docs in one cited answer |
-| Retrieval self-correction | system prompt + `search_documents` tool contract | On `low_confidence=true` the agent rewords the query and retries; tool errors are read, fixed, retried |
-| Answer verification | `agent.py` `_verify()` | An independent second LLM pass audits every claim in the draft against the raw tool results; failed audits trigger one revision + re-audit |
-| Conversation memory | `RabivyAgent.history` | "Why is **this** doctor not converting?" resolves from the session |
-| Zero-cost testing | `llm_client.py` `MockLLM` | The full agent stack runs deterministically with no API key — behaviour (tool selection + retrieval) is testable for free |
+## Design
 
-## Files
+The core rule is a strict separation between facts and language. Exact
+numbers come from the structured query engine (a pandas layer over the
+15,000-record prescriber table). Narrative content comes from semantic
+retrieval over the embedded document corpus. The language model plans tool
+calls, combines results, and writes the response. It is not the source of
+any fact, and a verification step enforces that.
 
-- `llm_client.py` — one LLM interface: Anthropic Claude (when `ANTHROPIC_API_KEY` is set) or a deterministic mock (otherwise / `AGENT_LLM=mock`)
-- `agent_tools.py` — the two engines exposed as 5 typed tools: `query_hcp_table`, `lookup_hcp`, `count_active_writers`, `states_summary`, `search_documents`
-- `agent.py` — the orchestrator: plan → act → observe loop, synthesis, verification pass, session memory, CLI/interactive chat
-- `test_the_agent.py` — agent-level eval: the same question bank as `test_the_system.py`, now expected to come back as complete answers; plus a conversation-memory scenario
-- `embedding_backend.py` — pluggable embedding backend: MiniLM as before, with an offline TF-IDF+LSA fallback (recorded in `embedding_meta.json`) for machines that can't reach HuggingFace. `3_create_embeddings.py` and `search_documents.py` now import it; behaviour on a normal machine is unchanged.
+Request lifecycle:
 
-## Run it
+1. The agent receives a question, plus the conversation history.
+2. The model selects one or more tools and parameters. Results are fed
+   back, and the model may issue further calls (up to 8 rounds). A
+   retrieval flagged low-confidence is retried once with reformulated
+   terms; a failed tool call is retried once with corrected input.
+3. The model writes an answer with inline source citations
+   (`[hcp_table]`, `[doc: <chunk_id>]`).
+4. A separate audit call (fresh context, temperature 0) classifies each
+   claim in the draft as supported, unsupported, or contradicted by the
+   accumulated tool results. On failure, the agent revises once, with
+   tool access, and re-audits.
+5. The answer, tool trace, and audit verdict are returned. History is
+   retained, so follow-up questions resolve against prior turns.
+
+## Components
+
+| File | Role |
+|---|---|
+| `agent.py` | Orchestrator: tool loop, synthesis, audit and revision, session memory. CLI and interactive REPL. |
+| `agent_tools.py` | The two engines exposed as five typed tools (JSON Schema). Results are field-selected and rounded at the boundary. |
+| `llm_client.py` | Single LLM interface: Anthropic API when `ANTHROPIC_API_KEY` is set, otherwise a deterministic offline stub for zero-cost testing. |
+| `chat_ui.py` | Local web interface (standard library only). Renders the tool trace and audit verdict alongside each response. |
+| `test_the_agent.py` | Agent-level evaluation: 22 scenarios plus a conversation-memory scenario. Nonzero exit on failure. |
+| `.github/workflows/eval.yml` | Runs the build and the evaluation on every push and pull request. |
+| `embedding_backend.py` | Embedding abstraction: MiniLM by default, TF-IDF/LSA fallback when the model is unavailable. The store records which backend built it. |
+| `distill_router.py` | Experiment: derives deterministic fast-path routing rules from observed agent decisions, promoting only rules with 100% precision against the evaluation history. |
+
+## Evaluation
+
+Three mechanisms, at different points in the lifecycle:
+
+- **Golden set (offline).** `test_the_agent.py` runs the scenario bank
+  end-to-end and checks tool selection, retrieval, and (with a live model)
+  answer content. Runs are timestamped into `eval_runs/` for comparison
+  over time. CI executes this on every change, in offline mode.
+- **Per-response audit (runtime).** Every answer is checked against its
+  own evidence before it is returned, independent of the test set.
+- **Citations (always).** Each claim is traceable to a table query or a
+  document chunk by ID.
+
+Offline mode exercises routing and retrieval deterministically at no cost;
+the live configuration additionally evaluates synthesis quality and the
+audit loop. Both configurations pass the full scenario bank.
+
+## Running
 
 ```bash
 pip install -r requirements.txt
-python main.py                      # rebuild the knowledge base (unchanged)
+python main.py                 # build the knowledge base (chunk, tag, embed)
 
-# no API key needed - free, deterministic:
-python test_the_agent.py            # behavioural eval (tool selection + retrieval)
+python test_the_agent.py       # evaluation; runs offline without an API key
 
-# with a real LLM:
-export ANTHROPIC_API_KEY=sk-ant-...   # Windows: set ANTHROPIC_API_KEY=sk-ant-...
+export ANTHROPIC_API_KEY=...   # Windows: set ANTHROPIC_API_KEY=...
 python agent.py "Who should I target next month in New York, and what should I say to them?"
-python agent.py                     # interactive chat, conversation memory on
-python test_the_agent.py            # full eval incl. answer quality + verification
+python agent.py                # interactive session
+python chat_ui.py              # web interface at http://localhost:8017
 ```
 
-## Grounding principle
+## Router distillation experiment
 
-Exact numbers only ever come from the structured engine; narrative
-content only ever comes from retrieval. The LLM plans, joins, and
-phrases — and the verification pass rejects any claim that isn't in the
-retrieved evidence. The model is never the source of a fact.
+`distill_router.py` addresses the maintenance cost of hand-written routing
+rules. It mines the evaluation history for observed question-to-tool
+decisions, generates candidate regular-expression rules, and accepts a rule
+only if every historical question it matches was routed to the tool it
+predicts. Accepted rules could serve as a zero-cost fast path in front of
+the model-based router; rejected rules never ship. In testing, the
+validation gate rejected a substring pattern (`top `) that matches inside
+"stop taking" — the same class of defect previously found by hand in the
+baseline router — and accepted a rule set covering 82% of observed traffic.
+
+## Attribution
+
+Phases 1–4 (knowledge repository, propensity model, structured and semantic
+retrieval engines, baseline router and its evaluation) were built by a
+collaborator; see the main README and commit history. This layer, Phases
+5–6, builds on that foundation without modifying the engines. Two files
+were touched to introduce the embedding fallback (`3_create_embeddings.py`,
+`search_documents.py`); everything else is additive.
