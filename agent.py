@@ -117,9 +117,12 @@ class RabivyAgent:
 
         # ---- VERIFICATION PASS: audit the draft against the evidence ----
         verification = {"verdict": "not_checked", "issues": []}
+        audit_trail = []          # every audit round, for full transparency
+        draft_answer = answer     # kept so a revision can be diffed against it
         revised = False
         if self.verify and evidence:
             verification = self._verify(question, answer, evidence)
+            audit_trail.append({"stage": "draft", **verification})
             if verification.get("verdict") == "fail" and not isinstance(self.llm, MockLLM):
                 # One revision round: hand the auditor's findings back and
                 # ask for a corrected answer - then re-audit it.
@@ -143,13 +146,16 @@ class RabivyAgent:
                     answer = revised_answer
                     revised = True
                     verification = self._verify(question, answer, evidence)
+                    audit_trail.append({"stage": "revised", **verification})
 
         # ---- Close the turn in memory, trimmed so history can't balloon ----
         self.history.append({"role": "assistant", "content": answer})
         self._trim_history()
 
         return {"answer": answer, "steps": steps, "evidence": evidence,
-                "verification": verification, "revised": revised}
+                "verification": verification, "revised": revised,
+                "draft_answer": (draft_answer if revised else None),
+                "audit_trail": audit_trail}
 
     # ------------------------------------------------------------------
     def _run_loop(self, evidence, steps):
