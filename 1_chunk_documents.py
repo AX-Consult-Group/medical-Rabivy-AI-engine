@@ -34,6 +34,18 @@ def extract_field(text, label):
             return s.split(":", 1)[1].strip()
     return ""
 
+# ---- CHUNK: sanitize_for_id ----
+# Turn a heading like "Coverage by Payer Type > Medicaid (state/federal, low-income)"
+# into a safe chunk_id fragment: lowercase, spaces -> underscores, and strip out
+# anything that isn't a letter/digit/underscore/hyphen (so ">", "(", ")", "/" etc.
+# don't end up inside an id).
+def sanitize_for_id(text):
+    text = text.lower().strip()
+    text = re.sub(r"[^\w\s-]", "", text)
+    text = re.sub(r"\s+", "_", text)
+    return text
+
+
 # Make chunk_id unique; if it collides, append _2, _3, ... and warn.
 def make_unique_id(base_id, seen_counter):
     seen_counter[base_id] += 1
@@ -52,6 +64,7 @@ n_cards = 0
 n_narrative_docs = 0
 n_skipped = 0
 n_bad_npi = 0
+n_h3_splits = 0
 id_counter = Counter()
 
 for path in all_md_paths:
@@ -111,30 +124,80 @@ for path in all_md_paths:
             first_line = section.splitlines()[0]
             if not first_line.startswith("## "):
                 continue
-            heading = first_line.replace("#", "").strip()
-            # For the state summary doc, the heading IS the state.
-            state = heading if doc_name == "state_market_summary" else ""
+            parent_heading = first_line.replace("#", "").strip()
 
-            base_id = f"{doc_name}__{heading.lower().replace(' ', '_')}"
-            chunk_id = make_unique_id(base_id, id_counter)
+            # ---- CHUNK: check_for_h3_subsections ----
+            # Does this ## section contain any "### " lines? If not, this
+            # section behaves EXACTLY as it did before the fix: one chunk.
+            has_h3 = re.search(r"\n### ", "\n" + section) is not None
 
-            all_chunks.append({
-                "chunk_id": chunk_id,
-                "source_doc": doc_name,
-                "source_path": rel_path,
-                "doc_type": doc_type,
-                "npi": "",
-                "state": state,
-                "specialty": "",
-                "heading": heading,
-                "text": section,
-            })
+            if not has_h3:
+                heading = parent_heading
+                # For the state summary doc, the heading IS the state.
+                state = heading if doc_name == "state_market_summary" else ""
+
+                base_id = f"{doc_name}__{sanitize_for_id(heading)}"
+                chunk_id = make_unique_id(base_id, id_counter)
+
+                all_chunks.append({
+                    "chunk_id": chunk_id,
+                    "source_doc": doc_name,
+                    "source_path": rel_path,
+                    "doc_type": doc_type,
+                    "npi": "",
+                    "state": state,
+                    "specialty": "",
+                    "heading": heading,
+                    "text": section,
+                })
+                continue
+
+            # ---- CHUNK: split_into_h3_subsections ----
+            # Pull out the intro text (prose sitting between the "## " heading
+            # and the first "### " subheading) - this gets copied into EVERY
+            # resulting sub-chunk, so each one is self-contained on its own.
+            h3_pieces = re.split(r"\n(?=### )", section)
+            intro_piece = h3_pieces[0]
+            intro_text = "\n".join(intro_piece.splitlines()[1:]).strip()
+
+            for piece in h3_pieces[1:]:
+                piece = piece.strip()
+                sub_first_line = piece.splitlines()[0]
+                sub_heading = sub_first_line.replace("#", "").strip()
+                sub_body = "\n".join(piece.splitlines()[1:]).strip()
+
+                heading = f"{parent_heading} > {sub_heading}"
+                if intro_text:
+                    chunk_text = f"## {heading}\n\n{intro_text}\n\n{sub_body}"
+                else:
+                    chunk_text = f"## {heading}\n\n{sub_body}"
+
+                # Use parent_heading (not the combined heading) for state,
+                # in case a state-summary-style doc ever gains ### subsections.
+                state = parent_heading if doc_name == "state_market_summary" else ""
+
+                base_id = f"{doc_name}__{sanitize_for_id(heading)}"
+                chunk_id = make_unique_id(base_id, id_counter)
+
+                all_chunks.append({
+                    "chunk_id": chunk_id,
+                    "source_doc": doc_name,
+                    "source_path": rel_path,
+                    "doc_type": doc_type,
+                    "npi": "",
+                    "state": state,
+                    "specialty": "",
+                    "heading": heading,
+                    "text": chunk_text,
+                })
+                n_h3_splits += 1
 
 # ---- Summary (no giant per-chunk list, since there are thousands) ----
 print(f"Narrative docs chunked : {n_narrative_docs}")
 print(f"Cards added (1 each)   : {n_cards}")
 print(f"Meta files skipped     : {n_skipped}")
 print(f"Cards with bad NPI     : {n_bad_npi}")
+print(f"### sub-chunks created : {n_h3_splits}")
 print(f"TOTAL chunks           : {len(all_chunks)}")
 print("By doc_type            :", dict(Counter(c["doc_type"] for c in all_chunks)))
 

@@ -252,16 +252,74 @@ _ZERO_WRITER_EXCLUDE = re.compile(r"\bexclud\w*\s*(?:the\s*)?zero[- ]?writers?\b
                                     r"\bactive\s*writers?\s*only\b|\bonly\s*active\s*writers?\b|"
                                     r"\bexcluding\s*non[- ]?writers?\b")
 
+# A BARE mention of "active writers/prescribers/hcps" (no "only"
+# qualifier) - this is what lets a list-style question like "Show all
+# active writers in Texas" apply zero_writer=False once it reaches
+# PATH 3, instead of that phrase being invisible to the filter engine.
+_ACTIVE_WRITER_BARE = re.compile(r"\bactive\s*(?:glp-1\s*)?(?:writers?|prescribers?|hcps?)\b")
+
+# A BARE mention of "zero-writers"/"non-writers" (no "only" qualifier)
+# - used ONLY by PATH 1 to decide which number a plain count question
+# is actually asking about (see Issue 8's fix in PATH 1 below). This is
+# deliberately separate from _ZERO_WRITER_ONLY, which means something
+# different: "give me a FILTERED LIST of zero-writers only."
+_ZERO_WRITER_MENTION = re.compile(r"\bzero[- ]?writers?\b|\bnon[- ]?writers?\b")
+
 
 def _detect_zero_writer(ql):
     """True (only zero-writers), False (exclude zero-writers), or
     None (not mentioned - don't filter on it at all, same policy as
     every other filter here)."""
-    if _ZERO_WRITER_EXCLUDE.search(ql):
+    if _ZERO_WRITER_EXCLUDE.search(ql) or _ACTIVE_WRITER_BARE.search(ql):
         return False
     if _ZERO_WRITER_ONLY.search(ql):
         return True
     return None
+
+
+# ---- Unresolved referent guard ------------------------------------------
+# Catches a question that clearly means ONE specific doctor ("this
+# doctor," "that HCP," "him," "her") but never actually names which
+# one via an NPI. Routing anyway means either engine ends up guessing
+# - reusing an NPI from an earlier unrelated question, or matching
+# whatever card happens to score highest - and answering fluently as
+# if that guess were correct. A rep has no way to tell a guessed
+# answer apart from a real one, so this has to be caught before ANY
+# routing happens, not inside one engine's branch.
+#
+# This system only ever identifies a specific HCP by their 10-digit
+# NPI (no proper names appear anywhere in the data), so "no NPI in
+# the question" is a reliable stand-in for "no name given" here.
+_UNRESOLVED_REFERENT_PATTERNS = [
+    re.compile(r"\bthis (?:doctor|hcp|physician|prescriber|provider)\b"),
+    re.compile(r"\bthat (?:doctor|hcp|physician|prescriber|provider)\b"),
+    re.compile(r"\bhim\b"), re.compile(r"\bher\b"),
+    re.compile(r"\bhe\b"), re.compile(r"\bshe\b"),
+]
+_NPI_PATTERN = re.compile(r"\b(\d{10})\b")
+
+
+def _has_unresolved_referent(question):
+    """True if the question refers to a specific-but-unnamed doctor
+    and gives no NPI anywhere to resolve who that is."""
+    if _NPI_PATTERN.search(question):
+        return False  # a real NPI is given - fully resolved, nothing to flag
+    ql = question.lower()
+    return any(p.search(ql) for p in _UNRESOLVED_REFERENT_PATTERNS)
+
+
+# ---- Explicit list-ACTION language (Issue 9) -----------------------
+# Deliberately separate from LIST_WORDS above: LIST_WORDS includes
+# plain nouns ("prescribers", "hcps", "doctors"...) that show up just
+# as often in a bare COUNT question ("how many active prescribers")
+# as in a real list request - so using LIST_WORDS itself to gate PATH 1
+# would incorrectly block plain counts too. This is only the ACTION
+# verbs that mean "show me the actual entries," not just "count them."
+_LIST_ACTION_PHRASES = ["list", "show ", "give me", "find ", "which "]
+
+
+def _wants_list_action(ql):
+    return any(p in ql for p in _LIST_ACTION_PHRASES)
 
 
 # ---- HCP-context guard --------------------------------------------------
@@ -814,12 +872,23 @@ def _detect_continuous_signals(ql, levels, extra_filters):
 # score", "ranked by PA burden" - which should always win over any
 # other rule below, since the person said exactly what they want.
 # ---------------------------------------------------------------------
-_EXPLICIT_SORT_SPLIT = re.compile(r"\b(?:sort(?:ed)?|rank(?:ed)?)\s+by\s+")
+_RANK_OR_SORT_VERB = re.compile(r"\b(?:sort(?:ed)?|rank(?:ed)?)\b")
+_BY_SPLIT = re.compile(r"\bby\s+")
 _EXPLICIT_SORT_STOP_WORDS = re.compile(r"\b(?:in|for|and|who|among|within)\b|[?.,;]")
 
 
 def _detect_explicit_sort_column(ql):
-    parts = _EXPLICIT_SORT_SPLIT.split(ql, maxsplit=1)
+    # Find the rank/sort verb FIRST, then look for the next "by" AFTER
+    # it - not just the first "by" anywhere in the question. This is
+    # what correctly handles "Rank Novo-heavy California prescribers by
+    # switching score" (words sitting between the verb and "by"), while
+    # still not accidentally grabbing an unrelated earlier "by" clause
+    # in a longer question (e.g. "targeted by reps, ranked by X").
+    m = _RANK_OR_SORT_VERB.search(ql)
+    if not m:
+        return None
+    after_verb = ql[m.end():]
+    parts = _BY_SPLIT.split(after_verb, maxsplit=1)
     if len(parts) < 2:
         return None
     phrase = _EXPLICIT_SORT_STOP_WORDS.split(parts[1], maxsplit=1)[0].strip()
@@ -962,11 +1031,28 @@ def _has_other_filter_language(ql):
 def ask(question):
     ql = question.lower()
 
+    # ---- PATH 0: unresolved referent -> ask, don't guess -------------
+    # Runs before every other path (structured AND RAG), since both
+    # engines were separately found to guess at "which doctor" instead
+    # of asking. See _has_unresolved_referent's comment above for why.
+    if _has_unresolved_referent(question):
+        return "CLARIFICATION / unresolved referent", {
+            "kind": "clarification",
+            "message": ("This question seems to be about a specific doctor "
+                        "(\"this doctor\" / \"that HCP\" / \"him\" / \"her\"), but no NPI is "
+                        "given, so I don't know which one. Please include the 10-digit NPI."),
+        }
+
     # ---- PATH 1: "how many ... writers in X" -> plain count --------
     if (any(w in ql for w in COUNT_WORDS) or "active" in ql) and ("writer" in ql or "prescriber" in ql or "hcp" in ql):
         st = _find_state(ql)
-        if st and not _has_other_filter_language(ql):
-            return "STRUCTURED / count", qs.count_writers(st)
+        if st and not _has_other_filter_language(ql) and not _wants_list_action(ql):
+            result = qs.count_writers(st)
+            # Which number does this question actually want? A bare
+            # "zero-writers"/"non-writers" mention means the rep wants
+            # the ZERO count, not the default active count.
+            result["asked_about"] = "zero" if _ZERO_WRITER_MENTION.search(ql) else "active"
+            return "STRUCTURED / count", result
 
     # ---- PATH 2: "how many scripts did NPI ... write" -> HCP lookup ----
     m = re.search(r"\b(\d{10})\b", question)
@@ -1208,6 +1294,12 @@ CLARIFICATIONS = {
 
 
 def format_answer(route, data):
+    # ---- Clarification requests aren't a failed lookup - they never
+    # reached a search at all, so they're returned as-is, before the
+    # "was it found" check below (which is about search results).
+    if data.get("kind") == "clarification":
+        return data["message"]
+
     # ---- Rule #1, checked before anything else: was it found? -------
     if not data.get("found", True):
         return f"Answer not found. {data.get('error', 'No matching data.')}"

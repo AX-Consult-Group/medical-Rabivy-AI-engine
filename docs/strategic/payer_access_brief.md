@@ -6,6 +6,8 @@ For GLP-1 obesity therapies, the clinical decision to prescribe is only half the
 
 ## Coverage by Payer Type
 
+Rabivy coverage by the four dominant payer types in the United States.
+
 ### Commercial (employer & private plans)
 Strongest near-term opportunity. Largest insured population. Diabetes indication is well covered; obesity coverage is growing but varies by employer, with larger employers more likely to cover. Prior authorization is required by most major carriers, typically needing documentation of BMI or comorbidities. Step therapy (fail cheaper alternatives or lifestyle first) is common, especially for the obesity indication.
 

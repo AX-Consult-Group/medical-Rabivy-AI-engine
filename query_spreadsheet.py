@@ -347,8 +347,9 @@ def count_writers(state):
 
     in_state = df[df["state"] == clean_state]
     active = in_state[~in_state["zero_writer"]]
+    total = len(in_state)
     return {"kind": "writer_count", "found": True, "state": state,
-            "active": len(active), "total": len(in_state)}
+            "active": len(active), "zero": total - len(active), "total": total}
 
 
 # ---------------------------------------------------------------------
@@ -569,6 +570,10 @@ def format_top_prescriber(data):
 def format_count_writers(data):
     if not data["found"]:
         return data["error"]
+    if data.get("asked_about") == "zero":
+        return (f"{data['zero']} zero-writer HCPs in {data['state'].title()} "
+                f"(out of {data['total']} HCPs) - i.e. HCPs on file who currently "
+                f"write no GLP-1 prescriptions.")
     return (f"{data['active']} active GLP-1 writers in {data['state'].title()} "
             f"(out of {data['total']} HCPs).")
 
