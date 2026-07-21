@@ -46,10 +46,18 @@ jobs:
           AGENT_LLM: mock
         run: python test_the_agent.py
 
-      - name: Keep eval history as build artifacts
+      - name: Model gap digest (champion scorecard vs learned challenger)
+        run: |
+          python challenger_validation.py --simulate
+          python challenger_validation.py > /dev/null
+          python challenger_validation.py --digest >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Keep eval history + model gap report as build artifacts
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: eval-runs
-          path: eval_runs/
+          name: eval-and-model-gap
+          path: |
+            eval_runs/
+            output/model_gap_report.md
           if-no-files-found: ignore
