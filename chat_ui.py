@@ -4,13 +4,18 @@
 # agent.py. Not just a chat: every response ships with its full trace,
 # so the pipeline is inspectable per answer:
 #
-#   GATES  - a per-answer checklist: tool grounding, retrieval
-#            confidence, source citations, and the hallucination audit
-#            (including whether a draft was rejected and auto-revised)
-#   TRACE  - every tool call with its exact parameters and the evidence
-#            it returned (table rows, document chunks with similarity
-#            scores), plus the audit verdicts and, when a revision
-#            fired, the rejected draft for comparison
+#   GATES      - a per-answer checklist: tool grounding, retrieval
+#                confidence, source citations, and the hallucination
+#                audit (including whether a draft was auto-revised)
+#   TRACE      - every tool call with its exact parameters and the
+#                evidence it returned, plus the audit verdicts and,
+#                when a revision fired, the rejected draft
+#   QUARANTINE - human-in-the-loop exception handling: an answer whose
+#                final audit is not a clean pass is WITHHELD. The
+#                reviewer sees the auditor's objections and the full
+#                evidence, and releases or rejects the answer
+#                explicitly. Decisions are logged to
+#                output/review_log.jsonl as the governance trail.
 #
 #   python chat_ui.py          -> open http://localhost:8017
 #
@@ -20,12 +25,16 @@
 # -------------------------------------------------------------------
 
 import json
+import os
 import re
 import threading
+import time
 import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from agent import RabivyAgent
+
+REVIEW_LOG = os.path.join("output", "review_log.jsonl")
 
 PORT = 8017
 
@@ -167,6 +176,16 @@ PAGE = r"""<!DOCTYPE html>
   .audit-round.pass{background:var(--ok-bg)} .audit-round.fail{background:var(--bad-bg)}
   .draft{background:#fbfbfd;border:1px dashed var(--line);border-radius:8px;padding:8px 12px;
          font-size:12px;color:var(--muted);margin-top:5px;white-space:pre-wrap}
+  /* quarantine */
+  .qcard{border:2px solid #f0b1b1;border-radius:12px;background:var(--bad-bg);padding:14px 16px}
+  .qtitle{font-size:13.5px;font-weight:800;color:var(--bad)}
+  .qsub{font-size:12px;color:var(--muted);margin:4px 0 8px}
+  .qissue{font-size:12px;background:#fff;border:1px solid #f0b1b1;border-radius:8px;padding:6px 10px;margin:4px 0}
+  .qbtns{display:flex;gap:10px;margin-top:10px}
+  .qbtn{padding:8px 16px;font-size:12.5px;font-weight:700;border-radius:8px;border:1.5px solid;cursor:pointer}
+  .qapprove{background:#fff;border-color:#9fd9be;color:var(--ok)}
+  .qreject{background:#fff;border-color:#f0b1b1;color:var(--bad)}
+  .qdecided{font-size:12px;font-weight:700;margin-top:8px}
   .thinking{color:var(--muted);font-size:13px}
   .dots::after{content:'';animation:d 1.2s infinite}
   @keyframes d{0%{content:'.'}33%{content:'..'}66%{content:'...'}}
@@ -181,7 +200,7 @@ PAGE = r"""<!DOCTYPE html>
 <body>
 <header>
   <h1>Rabivy Intelligence Console</h1>
-  <div class="sub">Agentic RAG with full-trace transparency &middot; synthetic data &middot; every answer shows its evidence and the gates it cleared</div>
+  <div class="sub">Agentic RAG with full-trace transparency &middot; synthetic data &middot; every answer shows its evidence and the gates it cleared &middot; unverified answers are held for human review</div>
 </header>
 <div id="chat"></div>
 <footer>
@@ -248,13 +267,53 @@ function auditHtml(d){
   if(d.draft_answer)h+='<div class="tsummary" style="margin-top:6px"><strong>Rejected draft (before revision):</strong></div><div class="draft">'+esc(d.draft_answer)+'</div>';
   return h||'<div class="tsummary">No audit rounds recorded.</div>';
 }
-function addAnswer(d){
+function detailsHtml(d){
+  return '<details><summary>Evidence trace &mdash; '+d.trace.length+' tool call(s)</summary><div class="trace-body">'+traceHtml(d)+'</div></details>'
+       + '<details><summary>Audit detail</summary><div class="trace-body">'+auditHtml(d)+'</div></details>';
+}
+function logReview(question,d,decision){
+  const last=(d.audit_trail||[]).slice(-1)[0]||{};
+  fetch('/review',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({question:question,verdict:d.verdict,decision:decision,
+                         issues:(last.issues||[]).map(String)})}).catch(()=>{});
+}
+function addAnswer(d,question){
+  if(d.quarantined){ addQuarantined(d,question); return; }
   let h='<div class="msg bot"><div class="who">Assistant</div><div class="bubble">'+md(d.answer);
   h+='<div class="gates">'+d.gates.map(gateHtml).join('')+'</div>';
-  h+='<details><summary>Evidence trace &mdash; '+d.trace.length+' tool call(s)</summary><div class="trace-body">'+traceHtml(d)+'</div></details>';
-  h+='<details><summary>Audit detail</summary><div class="trace-body">'+auditHtml(d)+'</div></details>';
+  h+=detailsHtml(d);
   h+='</div></div>';
   chat.appendChild(el(h)); chat.scrollTop=chat.scrollHeight;
+}
+function addQuarantined(d,question){
+  const last=(d.audit_trail||[]).slice(-1)[0]||{};
+  let h='<div class="msg bot"><div class="who">Assistant &mdash; held for review</div><div class="qcard">';
+  h+='<div class="qtitle">&#9888; ANSWER HELD FOR HUMAN REVIEW</div>';
+  h+='<div class="qsub">The audit could not verify this answer ('+esc(String(d.verdict))+'). It will not be released until a reviewer approves it. The auditor\'s objections:</div>';
+  for(const i of (last.issues||[]).slice(0,6)) h+='<div class="qissue">'+esc(String(i))+'</div>';
+  h+='<div class="gates">'+d.gates.map(gateHtml).join('')+'</div>';
+  h+=detailsHtml(d);
+  h+='<details><summary>Show the withheld answer</summary><div class="trace-body">'+md(d.answer)+'</div></details>';
+  h+='<div class="qbtns">'
+    +'<button class="qbtn qapprove">Approve &mdash; release answer</button>'
+    +'<button class="qbtn qreject">Reject &mdash; discard</button></div>';
+  h+='</div></div>';
+  const node=el(h);
+  node.querySelector('.qapprove').onclick=()=>{
+    logReview(question,d,'approved');
+    node.querySelector('.qcard').outerHTML=
+      '<div class="bubble">'+md(d.answer)
+      +'<div class="gates">'+d.gates.map(gateHtml).join('')+'</div>'
+      +detailsHtml(d)
+      +'<div class="qdecided" style="color:var(--ok)">&#10003; Released by reviewer (decision logged)</div></div>';
+  };
+  node.querySelector('.qreject').onclick=()=>{
+    logReview(question,d,'rejected');
+    node.querySelector('.qcard').innerHTML=
+      '<div class="qtitle">Rejected by reviewer</div>'
+      +'<div class="qsub">The withheld answer was discarded. Decision logged to the review trail.</div>';
+  };
+  chat.appendChild(node); chat.scrollTop=chat.scrollHeight;
 }
 async function ask(){
   const text=q.value.trim(); if(!text)return;
@@ -264,7 +323,7 @@ async function ask(){
   chat.appendChild(think); chat.scrollTop=chat.scrollHeight;
   try{
     const r=await fetch('/ask',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:text})});
-    const d=await r.json(); think.remove(); addAnswer(d);
+    const d=await r.json(); think.remove(); addAnswer(d,text);
   }catch(e){ think.remove(); chat.appendChild(el('<div class="msg bot"><div class="bubble">Error: '+esc(String(e))+'</div></div>')); }
   send.disabled=false; q.focus();
 }
@@ -290,6 +349,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_error(404)
 
     def do_POST(self):
+        if self.path == "/review":
+            self._handle_review()
+            return
         if self.path != "/ask":
             self.send_error(404)
             return
@@ -302,18 +364,53 @@ class Handler(BaseHTTPRequestHandler):
             with _agent_lock:
                 result = _agent.ask(question)
             ev = _evidence_view(result["evidence"])
+            verdict = (result.get("verification") or {}).get("verdict")
             body = json.dumps({
                 "answer": result["answer"],
                 "gates": _gates(result, ev),
                 "trace": ev,
                 "audit_trail": result.get("audit_trail", []),
                 "draft_answer": result.get("draft_answer"),
+                "verdict": verdict,
+                # Quarantine rule: only a clean audit pass ships directly.
+                # "fail" and "audit_error" are withheld for a human.
+                # "not_checked" (offline mode, no auditor) is delivered
+                # but clearly labeled by its gate.
+                "quarantined": verdict in ("fail", "audit_error"),
             }, default=str).encode("utf-8")
             self.send_response(200)
         except Exception as e:
             body = json.dumps({"answer": f"Server error: {type(e).__name__}: {e}",
                                "gates": [], "trace": [], "audit_trail": [],
                                "draft_answer": None}).encode("utf-8")
+            self.send_response(500)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _handle_review(self):
+        """Record a human release/reject decision on a quarantined
+        answer. Appends one JSON line per decision - the audit trail a
+        governance process would ask for."""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            entry = {
+                "reviewed_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "question": str(payload.get("question", ""))[:500],
+                "verdict": str(payload.get("verdict", "")),
+                "decision": ("approved" if payload.get("decision") == "approved"
+                              else "rejected"),
+                "issues": payload.get("issues", [])[:10],
+            }
+            os.makedirs("output", exist_ok=True)
+            with open(REVIEW_LOG, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry) + "\n")
+            body = json.dumps({"ok": True}).encode("utf-8")
+            self.send_response(200)
+        except Exception as e:
+            body = json.dumps({"ok": False, "error": str(e)}).encode("utf-8")
             self.send_response(500)
         self.send_header("Content-Type", "application/json; charset=utf-8")
         self.send_header("Content-Length", str(len(body)))
