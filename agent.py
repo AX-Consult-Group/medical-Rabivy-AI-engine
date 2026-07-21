@@ -36,10 +36,14 @@
 # -------------------------------------------------------------------
 
 import json
+import re
 import sys
 
 from llm_client import get_llm, MockLLM
 from agent_tools import TOOL_SCHEMAS, run_tool
+
+# Any 10-digit number is treated as an NPI for the identifier check.
+_NPI_PATTERN = re.compile(r"\b\d{10}\b")
 
 MAX_STEPS = 8          # hard cap on tool-use rounds per question
 MAX_HISTORY_TURNS = 6  # question/answer pairs kept as conversation memory
@@ -121,7 +125,7 @@ class RabivyAgent:
         draft_answer = answer     # kept so a revision can be diffed against it
         revised = False
         if self.verify and evidence:
-            verification = self._verify(question, answer, evidence)
+            verification = self._full_audit(question, answer, evidence)
             audit_trail.append({"stage": "draft", **verification})
             if verification.get("verdict") == "fail" and not isinstance(self.llm, MockLLM):
                 # One revision round: hand the auditor's findings back and
@@ -134,7 +138,10 @@ class RabivyAgent:
                     + "\nRewrite the answer using ONLY facts present in the tool "
                       "results above. Remove or correct every flagged claim. If "
                       "part of the question cannot be answered from the "
-                      "evidence, say so plainly."})
+                      "evidence, say so plainly. Write the corrected answer as a "
+                      "standalone response addressed to the original user - do "
+                      "not address the auditor, apologize, or mention that an "
+                      "audit or rewrite happened."})
                 # The rewrite goes through the SAME tool loop as the
                 # original answer - a revising model often (correctly)
                 # wants to re-query a tool to fix a flagged number, and
@@ -145,7 +152,7 @@ class RabivyAgent:
                 if revised_answer:
                     answer = revised_answer
                     revised = True
-                    verification = self._verify(question, answer, evidence)
+                    verification = self._full_audit(question, answer, evidence)
                     audit_trail.append({"stage": "revised", **verification})
 
         # ---- Close the turn in memory, trimmed so history can't balloon ----
@@ -187,6 +194,36 @@ class RabivyAgent:
             self.history.append({"role": "user", "content": results_block})
         return ("I hit my step limit before finishing this question - "
                 "here is what I found so far, treat it as incomplete.")
+
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _ghost_npis(answer, evidence):
+        """Deterministic identifier gate. Language models can garble long
+        digit strings when transcribing them into an answer, and an LLM
+        auditor can miss the discrepancy for the same tokenization
+        reason - a real incident: a one-digit-off NPI survived the audit
+        and was only exposed by an exact lookup one question later.
+        Whether an NPI appears in the evidence is set membership, not
+        judgment, so it is checked in code: every 10-digit number in the
+        answer must literally appear somewhere in the tool results."""
+        known = set(_NPI_PATTERN.findall(json.dumps(evidence, default=str)))
+        used = set(_NPI_PATTERN.findall(answer))
+        return sorted(used - known)
+
+    def _full_audit(self, question, answer, evidence):
+        """LLM audit for meaning + deterministic check for identifiers.
+        Either one failing fails the whole audit."""
+        v = self._verify(question, answer, evidence)
+        ghosts = self._ghost_npis(answer, evidence)
+        if ghosts:
+            if not isinstance(v.get("issues"), list):
+                v["issues"] = []
+            v["issues"].extend(
+                f"NPI {g} does not appear in any tool result - probable "
+                f"transcription error (deterministic identifier check)"
+                for g in ghosts)
+            v["verdict"] = "fail"
+        return v
 
     # ------------------------------------------------------------------
     def _verify(self, question, answer, evidence):
