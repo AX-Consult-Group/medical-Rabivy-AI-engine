@@ -48,6 +48,8 @@ Request lifecycle:
 | `.github/workflows/eval.yml` | Runs the build and the evaluation on every push and pull request. |
 | `embedding_backend.py` | Embedding abstraction: MiniLM by default, TF-IDF/LSA fallback when the model is unavailable. The store records which backend built it. |
 | `distill_router.py` | Experiment: derives deterministic fast-path routing rules from observed agent decisions, promoting only rules with 100% precision against the evaluation history. |
+| `propensity_model.py` | Phase 2 scoring model as code (weights recovered from the released dataset, pending author confirmation). Verifies stored scores on every build (stage 0 of `main.py`) and scores new raw batches. |
+| `challenger_validation.py` | Champion–challenger model governance: trains a learned model on (simulated) launch outcomes using all inputs and reports where the a-priori scorecard falls short — AUC lift, blind-spot features, mis-ranked segments, functional-form calibration. Runs as a digest in CI. |
 
 ## Evaluation
 
