@@ -177,20 +177,31 @@ class MockLLM:
         # baseline router in ask_a_question.py).
         targeted = aq._detect_targeted(ql)
         competitor = aq._detect_competitor(ql)
-        min_switching = aq._detect_min_switching(ql)
+        # Reconciled 2026-07-22: _detect_min_switching was renamed to
+        # _detect_switching AND its return shape changed to
+        # (level_word_or_None, explicit_range_or_None) - same new shape
+        # _detect_pa_burden ALSO silently picked up under its unchanged
+        # name (found while fixing this - it doesn't crash, so CI never
+        # caught it: min_pa/max_pa below used to silently become a
+        # string like "high" and a tuple like (0.7, None) instead of
+        # numbers, which would have produced wrong/empty filter results
+        # or a confusing crash deep inside pandas, not here).
+        switching_level, switching_range = aq._detect_switching(ql)
         formulary = aq._detect_formulary(ql)
         sample = aq._detect_sample_request(ql)
-        min_pa, max_pa = aq._detect_pa_burden(ql)
+        pa_level, pa_range = aq._detect_pa_burden(ql)
         has_rank = any(p.search(ql) for p in aq.RANK_PATTERNS)
         hcp_ctx = aq._has_hcp_context(ql)
-        structured_signal = (targeted is not None or min_switching is not None
+        structured_signal = (targeted is not None
+                             or switching_level is not None or switching_range is not None
                              or (competitor and hcp_ctx) or (formulary and hcp_ctx)
                              or (sample is not None and hcp_ctx)
-                             or ((min_pa is not None or max_pa is not None) and hcp_ctx)
+                             or ((pa_level is not None or pa_range is not None) and hcp_ctx)
                              or (has_rank and hcp_ctx)
                              or aq._is_forward_targeting_question(ql)
                              or (multi_part and "target" in ql))
         if structured_signal:
+            import query_spreadsheet as qs  # for HIGH_CUTOFF/LOW_CUTOFF - level word -> real number
             table_input = {}
             st = aq._find_state(ql)
             spec = aq._detect_specialty(ql)
@@ -200,12 +211,50 @@ class MockLLM:
             if tier: table_input["tier"] = tier
             if targeted is not None: table_input["targeted"] = bool(targeted)
             if competitor: table_input["dominant_competitor"] = competitor
-            if min_switching is not None: table_input["min_switching"] = min_switching
             if formulary: table_input["formulary_tier"] = formulary
             if sample is not None: table_input["recent_sample_request"] = bool(sample)
-            if min_pa is not None: table_input["min_pa_burden"] = min_pa
-            if max_pa is not None: table_input["max_pa_burden"] = max_pa
-            table_input["sort_by"] = aq._detect_sort_by(ql)
+
+            # switching_score and pa_burden both come back as EITHER a
+            # level word ("high"/"low"/"moderate") or an explicit
+            # numeric range now - handle both identically, through
+            # extra_filters, instead of the old separate min_switching/
+            # min_pa_burden/max_pa_burden scalar fields (which only ever
+            # supported a MIN threshold - "low switching score" had no
+            # way to be expressed correctly before this fix either).
+            extra_filters = []
+
+            def _add_level_filter(column, level, explicit_range):
+                if explicit_range is not None:
+                    lo, hi = explicit_range
+                    extra_filters.append({"column": column, "min": lo, "max": hi})
+                elif level == "high":
+                    extra_filters.append({"column": column, "min": qs.HIGH_CUTOFF})
+                elif level == "low":
+                    extra_filters.append({"column": column, "max": qs.LOW_CUTOFF})
+                elif level == "moderate":
+                    extra_filters.append({"column": column, "min": qs.LOW_CUTOFF, "max": qs.HIGH_CUTOFF})
+
+            _add_level_filter("switching_score", switching_level, switching_range)
+            _add_level_filter("pa_burden", pa_level, pa_range)
+            if extra_filters:
+                table_input["extra_filters"] = extra_filters
+
+            # Reconciled 2026-07-22: _detect_sort_by no longer exists -
+            # replaced by _decide_sort(ql, levels, extra_filters), which
+            # needs dict-shaped context (not just the question text) to
+            # correctly pick between multiple numeric columns mentioned
+            # in the same question. Build that from the same two signals
+            # above (a small {column: level_word} dict - a different
+            # shape from the extra_filters LIST above, which matches
+            # this tool's own schema instead).
+            levels_dict = {}
+            if switching_level: levels_dict["switching_score"] = switching_level
+            if pa_level: levels_dict["pa_burden"] = pa_level
+            extra_filters_dict = {f["column"]: (f.get("min"), f.get("max")) for f in extra_filters}
+            sort_by, ascending, sort_reason = aq._decide_sort(ql, levels_dict, extra_filters_dict)
+            table_input["sort_by"] = sort_by
+            table_input["ascending"] = ascending
+
             top = aq._resolve_top(ql)
             if top is not None: table_input["top"] = min(top, 10)
             plan.append(("query_hcp_table", table_input))

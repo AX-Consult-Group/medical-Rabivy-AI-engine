@@ -75,7 +75,7 @@ TOOL_SCHEMAS = [
                 "state": {"type": "string", "description": "Full state name, e.g. 'New York'"},
                 "specialty": {"type": "string",
                               "enum": ["Endocrinology", "Primary Care", "Obesity Medicine"]},
-                "tier": {"type": "string", "enum": ["High", "Medium", "Low", "Watch"],
+                "tier": {"type": "string", "enum": ["High", "Medium", "Watch"],
                          "description": "Propensity tier"},
                 "targeted": {"type": "boolean",
                              "description": "true = currently targeted by a rep, false = not targeted"},
@@ -102,10 +102,13 @@ TOOL_SCHEMAS = [
                               "required": ["column"]},
                 },
                 "sort_by": {"type": "string",
-                            "description": ("Column to sort descending by. Default "
+                            "description": ("Column to sort by. Default "
                                             "'propensity_score'. Use 'rx_volume_monthly' for "
                                             "volume questions, 'switching_score' for switching "
                                             "questions.")},
+                "ascending": {"type": "boolean",
+                              "description": ("true = lowest first (e.g. 'lowest PA burden'), "
+                                              "false/omit = highest first (the usual case).")},
                 "top": {"type": "integer",
                         "description": "Rows to return (default 10, max 25). Total count always included."},
             },
@@ -157,8 +160,12 @@ TOOL_SCHEMAS = [
             "type": "object",
             "properties": {
                 "query": {"type": "string",
-                          "description": ("Search query. Include the state name for "
-                                          "state-market questions.")},
+                          "description": "Search query - what to search for."},
+                "state": {"type": "string",
+                          "description": ("Optional. Full state name, e.g. 'Missouri' - "
+                                         "filters the search to that state's documents "
+                                         "only. Leave unset for questions not about a "
+                                         "specific state.")},
                 "top_k": {"type": "integer", "description": "Sections to return (default 4, max 8)"},
             },
             "required": ["query"],
@@ -172,10 +179,23 @@ TOOL_SCHEMAS = [
 # =====================================================================
 
 def _query_hcp_table(inp):
-    extra = None
+    # Reconciled 2026-07-22: filter_hcps() no longer accepts
+    # min_switching/min_pa_burden/max_pa_burden as direct keyword
+    # arguments - those were replaced by a generic extra_filters dict
+    # of {column: (min, max)} tuples, which works for ANY real column,
+    # score or not. So the old "special" numeric fields fold into the
+    # same extra_filters dict as the tool's own generic ones, instead
+    # of being passed separately.
+    extra = {}
     if inp.get("extra_filters"):
-        extra = {f["column"]: (f.get("min"), f.get("max"))
-                 for f in inp["extra_filters"] if f.get("column")}
+        extra.update({f["column"]: (f.get("min"), f.get("max"))
+                      for f in inp["extra_filters"] if f.get("column")})
+    if inp.get("min_switching") is not None:
+        extra["switching_score"] = (inp["min_switching"], None)
+    if inp.get("min_pa_burden") is not None or inp.get("max_pa_burden") is not None:
+        extra["pa_burden"] = (inp.get("min_pa_burden"), inp.get("max_pa_burden"))
+    extra = extra or None
+
     top = min(int(inp.get("top", 10)), 25)
     data = query_spreadsheet.filter_hcps(
         state=inp.get("state"),
@@ -183,14 +203,12 @@ def _query_hcp_table(inp):
         tier=inp.get("tier"),
         targeted=(None if inp.get("targeted") is None else int(inp["targeted"])),
         dominant_competitor=inp.get("dominant_competitor"),
-        min_switching=inp.get("min_switching"),
         formulary_tier=inp.get("formulary_tier"),
         recent_sample_request=(None if inp.get("recent_sample_request") is None
                                else int(inp["recent_sample_request"])),
-        min_pa_burden=inp.get("min_pa_burden"),
-        max_pa_burden=inp.get("max_pa_burden"),
         extra_filters=extra,
         sort_by=inp.get("sort_by", "propensity_score"),
+        ascending=bool(inp.get("ascending", False)),
         top=top,
     )
     if not data.get("found", True):
@@ -231,20 +249,29 @@ def _states_summary(inp):
 
 
 def _search_documents(inp):
+    # Reconciled 2026-07-22: search_documents.search() no longer
+    # exists - replaced by semantic_search(), which returns a single
+    # dict ({"kind","found","confidence","results":[{"chunk","score"}]})
+    # instead of the old (route_string, [(chunk, score), ...]) tuple.
+    # Also now takes state as its own explicit parameter rather than
+    # relying on the state name being embedded in the free-text query -
+    # see the "state" field added to this tool's input_schema above.
     top_k = min(int(inp.get("top_k", 4)), 8)
-    route, results = search_documents.search(inp["query"], top_k=top_k)
-    low_conf = ("low confidence" in route) or not results
+    data = search_documents.semantic_search(
+        inp["query"], state=inp.get("state"), top_k=top_k)
+    if not data.get("found", True):
+        return {"error": data.get("error", "search failed")}
     return {
         "source": "knowledge_repository",
-        "retrieval_route": route,
-        "low_confidence": low_conf,
+        "confidence": data.get("confidence"),
+        "low_confidence": data.get("low_confidence", False),
         "sections": [
-            {"chunk_id": c["chunk_id"],
-             "doc": c.get("source_doc"),
-             "heading": c.get("heading"),
-             "similarity": (round(s, 3) if s is not None else None),
-             "text": c["text"][:1500]}
-            for c, s in results
+            {"chunk_id": r["chunk"]["chunk_id"],
+             "doc": r["chunk"].get("source_doc"),
+             "heading": r["chunk"].get("heading"),
+             "similarity": (round(r["score"], 3) if r["score"] is not None else None),
+             "text": r["chunk"]["text"][:1500]}
+            for r in data["results"]
         ],
     }
 
