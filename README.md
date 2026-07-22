@@ -25,6 +25,11 @@ Rabivy and AX Pharmaceuticals are fictional and were created solely for the purp
 To Do:
 Ground Truth Question 20 issue: This question routes to RAG and does a single search using the whole question as the query. That search finds state_market_summary__new_york — a document that's purely targeting data (prescriber lists, volumes, propensity). It contains nothing about messaging, competitive positioning, or talking points at all. So the AI genuinely only has half the ingredients — it can't "tap into key facts that make Rabivy better" because those facts were never retrieved in the first place. It's not an AI reasoning failure; it's a retrieval gap, same category as "didn't compare" was.
 
+
+**Figure 1: Project Pipeline**
+
+![Full pipeline, left to right, with agent add-on opportunities](figures/Rabivy_AI_engine_pipeline.jpg)
+
 ---
 
 ## Phase 1: GTM Strategy
@@ -109,7 +114,7 @@ Retrieval accuracy is tested against a set of questions with known correct answe
 
 ### Implementation Reference: Build Scripts vs. Tool Scripts
 
-**Figure 1: How the various files work together**
+**Figure 2: How the various files work together**
 
 ![How a question gets answered](figures/RAG_pipeline_flowchart.svg)
  
