@@ -51,6 +51,16 @@
 #   - "error" : only present when found is False - a plain-English
 #               reason, so a bad request never comes back looking the
 #               same as a real empty answer.
+#
+# BUG-CLASS FIX IN THIS VERSION (see count_by_flag() below):
+# A real test caught count_writers() always reporting the ACTIVE count,
+# even when the question asked about ZERO-writers - the data was right,
+# only the sentence was wrong, because nothing recorded which count the
+# caller actually wanted highlighted. Rather than patch that one
+# function, this version pulls the fix into a single reusable
+# primitive (count_by_flag) that any yes/no column - zero_writer,
+# targeted, sample_request_recent, or a new one added later - can use
+# safely, so this exact bug can't quietly reappear somewhere else.
 # =====================================================================
 
 import glob
@@ -182,6 +192,11 @@ OTHER_NUMERIC_COLUMNS = sorted([
     col for col in _numeric_columns
     if col not in _NEVER_A_SCORE_COLUMN and col not in SCORE_COLUMNS
 ])
+
+# The real yes/no (boolean-style) columns in this spreadsheet - used
+# by count_by_flag() below so a new flag column can be counted safely
+# without writing a brand new one-off function each time.
+FLAG_COLUMNS = ("zero_writer", "targeted", "sample_request_recent")
 
 
 # ---------------------------------------------------------------------
@@ -336,20 +351,68 @@ def top_prescriber(state):
 
 
 # ---------------------------------------------------------------------
+# GENERIC yes/no counter for ANY flag column (see FLAG_COLUMNS above) -
+# zero_writer, targeted, sample_request_recent, or a new one added to
+# the spreadsheet later. Always computes BOTH counts (how many are
+# True, how many are False) - `asked_about` only controls which one
+# gets highlighted by the presentation function later, so the two
+# never get confused with each other.
+#
+# This exists because count_writers() used to do this same job as a
+# one-off, hard-coded to zero_writer specifically - and a real test
+# found that its presentation function could report the wrong count
+# when a question specifically asked about the "false" side. Rather
+# than patch that single case, this is the one shared, careful version
+# every flag-counting function should build on, so the same mistake
+# can't quietly happen again on a different column.
+# ---------------------------------------------------------------------
+def count_by_flag(state, column, true_label, false_label, asked_about=None):
+    if column not in FLAG_COLUMNS:
+        return {"kind": "flag_count", "found": False,
+                "error": f"'{column}' isn't a recognized yes/no column. "
+                         f"Flag columns available: {list(FLAG_COLUMNS)}"}
+
+    clean_state, err = _clean_state(state)
+    if err:
+        return {"kind": "flag_count", "found": False, "state": state, "error": err}
+
+    in_state = df[df["state"] == clean_state]
+    is_true = in_state[column].fillna(False).astype(bool)
+    total = len(in_state)
+    n_true = int(is_true.sum())
+    n_false = total - n_true
+
+    return {"kind": "flag_count", "found": True, "state": state, "column": column,
+            true_label: n_true, false_label: n_false, "total": total,
+            "asked_about": asked_about or false_label}
+
+
+# ---------------------------------------------------------------------
 # Counts how many HCPs in a state are actively writing GLP-1
 # prescriptions (rather than zero-writers), out of the total HCPs on
 # file for that state.
+#
+# This is now a thin wrapper around count_by_flag() (see above) - kept
+# under its own specific name and with its original "active"/"zero"
+# keys because ask_a_question.py and agent_tools.py already call this
+# function by this exact name and expect those exact keys back. Only
+# the underlying computation moved to the shared, safer primitive;
+# nothing calling count_writers() today needs to change.
+#
+# asked_about: "active" (default, matches old behaviour) or "zero" -
+# which count the caller wants highlighted when this gets turned into
+# a sentence by format_count_writers() below.
 # ---------------------------------------------------------------------
-def count_writers(state):
-    clean_state, err = _clean_state(state)
-    if err:
-        return {"kind": "writer_count", "found": False, "state": state, "error": err}
-
-    in_state = df[df["state"] == clean_state]
-    active = in_state[~in_state["zero_writer"]]
-    total = len(in_state)
-    return {"kind": "writer_count", "found": True, "state": state,
-            "active": len(active), "zero": total - len(active), "total": total}
+def count_writers(state, asked_about="active"):
+    result = count_by_flag(state, column="zero_writer",
+                            true_label="zero", false_label="active",
+                            asked_about=asked_about)
+    if not result["found"]:
+        return {"kind": "writer_count", "found": False, "state": state,
+                "error": result["error"]}
+    return {"kind": "writer_count", "found": True, "state": result["state"],
+            "active": result["active"], "zero": result["zero"],
+            "total": result["total"], "asked_about": result["asked_about"]}
 
 
 # ---------------------------------------------------------------------
@@ -565,7 +628,27 @@ def format_top_prescriber(data):
 
 
 # ---------------------------------------------------------------------
-# Turns a count_writers() result into one readable sentence.
+# GENERIC presentation for any count_by_flag() result - turns it into
+# one readable sentence, always leading with whichever side
+# `asked_about` says the caller actually wanted, never defaulting
+# silently to the other one.
+# ---------------------------------------------------------------------
+def format_count_by_flag(data):
+    if not data["found"]:
+        return data["error"]
+    highlight = data.get("asked_about")
+    count = data.get(highlight)
+    return (f"{count} {highlight} HCPs in {data['state'].title()} "
+            f"(out of {data['total']} HCPs), by {data['column']}.")
+
+
+# ---------------------------------------------------------------------
+# Turns a count_writers() result into one readable sentence. Kept
+# separate from format_count_by_flag() (rather than replaced by it)
+# because this one has specific, friendlier wording for this
+# particular column ("active GLP-1 writers", "zero-writer HCPs... i.e.
+# HCPs on file who currently write no GLP-1 prescriptions") that a
+# fully generic version can't know to write.
 # ---------------------------------------------------------------------
 def format_count_writers(data):
     if not data["found"]:
@@ -612,9 +695,6 @@ def format_states_by_high_tier(data):
     return format_states_by_tier(data)
 
 
-# ---------------------------------------------------------------------
-# Turns a filter_hcps() result into a readable header + numbered list.
-# ---------------------------------------------------------------------
 # ---------------------------------------------------------------------
 # Turns any single cell value into safe display text - a missing/NaN
 # value shows as "n/a" (not a raw "nan", which reads like a software
@@ -680,10 +760,32 @@ def _extra_columns_for(filters, sort_by):
     return columns
 
 
+# ---------------------------------------------------------------------
+# Turns a filter_hcps() result into a readable header + numbered list.
+#
+# FIX: this now ALWAYS states which column it actually sorted by and
+# in which direction, straight from the real sort_by/ascending values
+# this function was given - not a separate claim written by whoever
+# called it. A real test found a case where the CALLER picked the
+# wrong column to sort by (a "rank by switching score" question was
+# sorted by rx_volume_monthly instead) while ALSO writing a sentence
+# claiming it sorted by "the specific measure this question was
+# about." That mismatch happened upstream, not in this function - but
+# this function silently going along with whatever sort_by it was
+# handed, with no visible record of what it actually did, is what let
+# the wrong claim go unnoticed. Now it can't: this line is generated
+# directly from data['filters']['sort_by'], so a wrong column choice
+# is immediately visible in the output rather than hidden behind a
+# possibly-incorrect sentence from elsewhere.
+# ---------------------------------------------------------------------
 def format_filter_hcps(data):
     if not data["found"]:
         return data["error"]
     f = data["filters"]
+
+    sort_direction = "lowest first" if f.get("ascending") else "highest first"
+    sort_line = f"Sorted by {f.get('sort_by', 'propensity_score')} ({sort_direction})."
+
     header = (f"{data['count']} HCPs match (state={f['state']}, region={f['region']}, "
               f"specialty={f['specialty']}, tier={f['tier']}, targeted={f['targeted']}, "
               f"competitor={f['dominant_competitor']}, formulary_tier={f['formulary_tier']}, "
@@ -692,9 +794,8 @@ def format_filter_hcps(data):
               f"{', extra=' + str(f['extra_filters']) if f.get('extra_filters') else ''}"
               f"{', extra_categorical=' + str(f['extra_categorical']) if f.get('extra_categorical') else ''}"
               f"). Top {len(data['results'])}:")
-    lines = []
-    if data.get("sort_reason"):
-        lines.append(data["sort_reason"])
+
+    lines = [sort_line]
     levels_desc = describe_levels(f.get("levels"))
     if levels_desc:
         lines.append(levels_desc)
@@ -736,6 +837,7 @@ if __name__ == "__main__":
     print("\nCategorical columns covered automatically:", CATEGORICAL_COLUMNS)
     print("\n0-1 SCORE columns (support high/moderate/low):", SCORE_COLUMNS)
     print("\nOther numeric columns (exact-number filtering only):", OTHER_NUMERIC_COLUMNS)
+    print("\nFlag (yes/no) columns:", FLAG_COLUMNS)
     print()
 
     print("-- region filter (South) --")
@@ -752,6 +854,13 @@ if __name__ == "__main__":
         print(f"  NPI {row['npi']} - {row['years_practice']} years in practice")
     print()
 
+    print("-- count_writers: active (default) vs zero, same state, side by side --")
+    print(" ", format_count_writers(count_writers("Texas")))
+    print(" ", format_count_writers(count_writers("Texas", asked_about="zero")))
+    print()
+
     print("-- deliberately-bad requests, to show validation catching them --")
     print(" ", filter_hcps(region="Southeast")["error"])          # not a real region
     print(" ", filter_hcps(levels={"years_practice": "high"})["error"])  # not a score column
+    print(" ", count_by_flag("Texas", column="not_a_real_column",
+                              true_label="x", false_label="y")["error"])  # not a real flag column

@@ -1,7 +1,7 @@
 # Objection Handling Guide
 Field reference. Common HCP objections and recommended responses. Keep responses factual and within promotional guidance; Rabivy is investigational.
 
-## "I'm already happy with Ozempic / Zepbound."
+## "I'm already happy/satisfied with Ozempic / Zepbound / Wegovy / Mounjaro."
 Acknowledge, then differentiate on patient fit, not product quality. "Those are strong agents. The question is which of your patients struggle with weekly injection burden or have plateaued - that subgroup is where monthly dosing and the dual mechanism are most relevant." Redirect to a specific patient type rather than a blanket switch.
 
 ## "Monthly dosing doesn't matter that much."
