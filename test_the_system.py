@@ -33,6 +33,17 @@
 # CLARIFICATION fix below). Now every run prints the score AND the
 # actual formatted answer together - test_router.py has been retired,
 # this file replaces it entirely.
+#
+# GROUPED BY STYLE, NOT BY WHEN IT WAS ADDED (2026-07-22): questions
+# used to just be appended to the end of the list as new gaps were
+# found, so the not-found/edge-case checks ended up looking like an
+# afterthought bolted on after everything else, rather than their own
+# clear category. Every question now has a "group" key, tests are
+# ordered by group, and the run() output prints a banner between
+# groups so the output reads as clear sections, not one long scroll.
+# Output format per question was also redone: QUESTION / STATUS+ROUTE /
+# NOTE / ANSWER are now visually separated blocks instead of one
+# cramped run-on paragraph.
 # ===================================================================
 
 import json
@@ -40,93 +51,111 @@ import os
 import time
 import ask_a_question   # single entry point; importing loads both engines
 
-# Each test: the question, its category, a "mode", and what to check.
+# Each test: the question, its group (for display), category, a "mode",
+# and what to check.
 #   mode "full"      -> check expect_engine + expect_contains  (PASS/FAIL)
 #   mode "retrieval" -> check expect_engine + expect_retrieves (ROUTES->LLM/FAIL)
 #   mode "llm"       -> check expect_engine only               (NEEDS-LLM/FAIL)
 TESTS = [
-    # ---- STRUCTURED: exact lookup & ranking (fully working) ----
-    {"q": "Who is the top GLP-1 prescriber in New York?",
+    # =================================================================
+    # GROUP 1: STRUCTURED - exact lookup, ranking, counting
+    # (fully working today - no LLM needed for any of these)
+    # =================================================================
+    {"group": "STRUCTURED - exact lookup, ranking & counting",
+     "q": "Who is the top GLP-1 prescriber in New York?",
      "cat": "structured lookup", "mode": "full",
      "expect_engine": "STRUCTURED", "expect_contains": "1658907316"},
-    {"q": "How many GLP-1 scripts did NPI 1344001929 write last month?",
+    {"group": "STRUCTURED - exact lookup, ranking & counting",
+     "q": "How many GLP-1 scripts did NPI 1344001929 write last month?",
      "cat": "structured lookup", "mode": "full",
      "expect_engine": "STRUCTURED", "expect_contains": "55"},
-    {"q": "List the top 10 High-tier prescribers nationally by propensity score.",
+    {"group": "STRUCTURED - exact lookup, ranking & counting",
+     "q": "List the top 10 High-tier prescribers nationally by propensity score.",
      "cat": "structured ranking", "mode": "full",
      "expect_engine": "STRUCTURED", "expect_contains": "1184547828"},
-    {"q": "Which states have the most High-tier HCPs?",
+    {"group": "STRUCTURED - exact lookup, ranking & counting",
+     "q": "Which states have the most High-tier HCPs?",
      "cat": "structured ranking", "mode": "full",
      "expect_engine": "STRUCTURED", "expect_contains": "California"},
-    {"q": "How many active GLP-1 writers are in Texas?",
+    {"group": "STRUCTURED - exact lookup, ranking & counting",
+     "q": "How many active GLP-1 writers are in Texas?",
      "cat": "structured count", "mode": "full",
      "expect_engine": "STRUCTURED", "expect_contains": "576"},
 
-    # ---- STRUCTURED: filtered targeting ----
-    # filter_hcps() answers these, but parsing several conditions out of
+    # =================================================================
+    # GROUP 2: STRUCTURED - filtered targeting (multi-field)
+    # filter_hcps() answers these; parsing several conditions out of
     # free text (specialty + state + tier + targeted) is the LLM's job.
-    # expect_engine added below - previously these were "llm" mode with no
-    # engine check at all, which is exactly what let the filter_hcps
-    # routing bug (Q6-Q9 falling through to RAG) go undetected.
-    {"q": "Show me High-propensity endocrinologists in Florida who are not currently targeted.",
+    # =================================================================
+    {"group": "STRUCTURED - filtered targeting (multi-field)",
+     "q": "Show me High-propensity endocrinologists in Florida who are not currently targeted.",
      "cat": "filtered targeting", "mode": "llm",
      "expect_engine": "STRUCTURED",
      "note": "filter_hcps() ready; multi-field parsing needs LLM"},
-    {"q": "Which Novo-heavy prescribers in California have a high switching score?",
+    {"group": "STRUCTURED - filtered targeting (multi-field)",
+     "q": "Which Novo-heavy prescribers in California have a high switching score?",
      "cat": "filtered targeting", "mode": "llm",
      "expect_engine": "STRUCTURED",
-     "note": "'Novo-heavy' now correctly maps to the Novo Nordisk competitor "
+     "note": "'Novo-heavy' correctly maps to the Novo Nordisk competitor "
              "filter (short form 'novo' was missing from the keyword list - "
              "'lilly' already worked as a short form, 'novo' didn't). Both "
-             "the competitor and switching-score filters now genuinely "
-             "apply. Multi-field parsing into the filter still needs the LLM."},
-    {"q": "Find high-volume writers in Illinois with a preferred formulary status.",
+             "the competitor and switching-score filters genuinely apply. "
+             "Multi-field parsing into the filter still needs the LLM."},
+    {"group": "STRUCTURED - filtered targeting (multi-field)",
+     "q": "Find high-volume writers in Illinois with a preferred formulary status.",
      "cat": "filtered targeting", "mode": "llm",
      "expect_engine": "STRUCTURED",
-     "note": "the formulary_tier column now exists and is wired in - routes "
+     "note": "the formulary_tier column exists and is wired in - routes "
              "correctly, sorted by rx_volume_monthly since the question said "
              "'high-volume'. Multi-field parsing into that filter still "
              "needs the LLM."},
-    {"q": "Which untargeted HCPs have a recent sample request and a High tier?",
+    {"group": "STRUCTURED - filtered targeting (multi-field)",
+     "q": "Which untargeted HCPs have a recent sample request and a High tier?",
      "cat": "filtered targeting", "mode": "llm",
      "expect_engine": "STRUCTURED",
      "note": "routes via 'untargeted' + tier + recent-sample-request "
-             "detection - the sample_request_recent column now exists and "
+             "detection - the sample_request_recent column exists and "
              "is wired in too. Multi-field parsing into the filter still "
              "needs the LLM."},
 
-    # ---- RAG cards: characterisation (retrieval works, wording needs LLM) ----
-    {"q": "Give me a summary of NPI 1344001929.",
+    # =================================================================
+    # GROUP 3: RAG - HCP cards & comparisons
+    # =================================================================
+    {"group": "RAG - HCP cards & comparisons",
+     "q": "Give me a summary of NPI 1344001929.",
      "cat": "card summary", "mode": "retrieval",
      "expect_engine": "RAG", "expect_retrieves": "card_1344001929"},
-    {"q": "What's the access situation for the top prescriber in Missouri?",
+    {"group": "RAG - HCP cards & comparisons",
+     "q": "What's the access situation for the top prescriber in Missouri?",
      "cat": "card (chained)", "mode": "llm",
      "expect_engine": "STRUCTURED",
      "note": "chained: this only proves step 1 (find top prescriber) routes "
              "correctly; step 2 (read their card) and synthesis aren't wired"},
-    {"q": "Why is this High-tier doctor not converting?",
+    {"group": "RAG - HCP cards & comparisons",
+     "q": "Why is this High-tier doctor not converting?",
      "cat": "card read", "mode": "llm",
      "expect_engine": "CLARIFICATION",
      "note": "no NPI given and no prior HCP in context - same unresolved-"
-             "referent case as 'Is this doctor...' elsewhere in this list. "
-             "Updated 2026-07-22: this used to fall through to a weak RAG "
-             "guess (top match ~0.30) because the old regex only caught "
-             "'this doctor' with nothing in between - 'this High-tier "
-             "doctor' slipped past it. Fixed by allowing up to 3 words "
-             "between 'this/that' and the noun (see "
-             "_UNRESOLVED_REFERENT_PATTERNS in ask_a_question.py)."},
-    {"q": "What's the story on GLP-1 writers in Arizona - who should I know about?",
+             "referent case as 'Is this doctor...' below. Updated "
+             "2026-07-22: this used to fall through to a weak RAG guess "
+             "(top match ~0.30) because the old regex only caught 'this "
+             "doctor' with nothing in between - 'this High-tier doctor' "
+             "slipped past it. Fixed by allowing up to 3 words between "
+             "'this/that' and the noun (see _UNRESOLVED_REFERENT_PATTERNS "
+             "in ask_a_question.py)."},
+    {"group": "RAG - HCP cards & comparisons",
+     "q": "What's the story on GLP-1 writers in Arizona - who should I know about?",
      "cat": "card narrative", "mode": "llm",
      "expect_engine": "RAG",
      "note": "needs LLM to synthesise across several cards"},
-
-    # ---- RAG comparison (card + benchmark + LLM) ----
-    {"q": "Compare NPI 1344001929 to a typical endocrinologist.",
+    {"group": "RAG - HCP cards & comparisons",
+     "q": "Compare NPI 1344001929 to a typical endocrinologist.",
      "cat": "comparison", "mode": "llm",
      "expect_engine": "RAG",
      "note": "retrieves the card via search_documents.py's NPI path; "
              "comparison to a benchmark needs LLM"},
-    {"q": "Is this doctor a high or low prescriber for their specialty?",
+    {"group": "RAG - HCP cards & comparisons",
+     "q": "Is this doctor a high or low prescriber for their specialty?",
      "cat": "comparison", "mode": "llm",
      "expect_engine": "CLARIFICATION",
      "note": "no NPI given and no prior HCP in context - correctly asks "
@@ -135,109 +164,113 @@ TESTS = [
              "2026-07-22: this test predates that guard, which used to "
              "expect a silent fall-through to RAG."},
 
-    # ---- RAG strategic & narrative (fully working: right chunk retrieved) ----
-    {"q": "What's our recommended messaging for competitive switchers?",
+    # =================================================================
+    # GROUP 4: RAG - narrative knowledge base (strategic & product content)
+    # =================================================================
+    {"group": "RAG - narrative knowledge base",
+     "q": "What's our recommended messaging for competitive switchers?",
      "cat": "narrative", "mode": "full",
      "expect_engine": "RAG", "expect_contains": "competitive_switchers"},
-    {"q": "What is Rabivy's key differentiator versus Zepbound?",
+    {"group": "RAG - narrative knowledge base",
+     "q": "What is Rabivy's key differentiator versus Zepbound?",
      "cat": "narrative", "mode": "full",
      "expect_engine": "RAG", "expect_contains": "differentiator"},
-    {"q": "How should a rep handle 'I'm already happy with Ozempic'?",
+    {"group": "RAG - narrative knowledge base",
+     "q": "How should a rep handle 'I'm already happy with Ozempic'?",
      "cat": "narrative", "mode": "full",
      "expect_engine": "RAG", "expect_contains": "objection_handling"},
-    {"q": "What's the Medicaid coverage outlook for GLP-1 obesity drugs?",
+    {"group": "RAG - narrative knowledge base",
+     "q": "What's the Medicaid coverage outlook for GLP-1 obesity drugs?",
      "cat": "narrative", "mode": "full",
      "expect_engine": "RAG", "expect_contains": "payer_access"},
-
-    # ---- Carried over from the old eval.py - these test paths/chunks the
-    # tests above didn't cover at all, notably: Missouri is the ONLY test
-    # anywhere in this file that exercises search_documents.py's
-    # state-filter path (Path 3) specifically, rather than general
-    # narrative semantic search.
-    {"q": "What does the GLP-1 market look like in Missouri?",
+    {"group": "RAG - narrative knowledge base",
+     "q": "What does the GLP-1 market look like in Missouri?",
      "cat": "narrative (state filter)", "mode": "full",
-     "expect_engine": "RAG", "expect_contains": "state_market_summary__missouri"},
-    {"q": "How is Rabivy's mechanism different from tirzepatide?",
+     "expect_engine": "RAG", "expect_contains": "state_market_summary__missouri",
+     "note": "Missouri is the ONLY test in this file that exercises "
+             "search_documents.py's state-filter path specifically, "
+             "rather than general narrative semantic search."},
+    {"group": "RAG - narrative knowledge base",
+     "q": "How is Rabivy's mechanism different from tirzepatide?",
      "cat": "narrative", "mode": "full",
      "expect_engine": "RAG",
      "expect_contains": ["mechanism_comparison", "molecule_and_mechanism",
                           "how_is_this_different_from_ti"]},
-    {"q": "What is Rabivy's main dosing advantage?",
+    {"group": "RAG - narrative knowledge base",
+     "q": "What is Rabivy's main dosing advantage?",
      "cat": "narrative", "mode": "full",
      "expect_engine": "RAG",
      "expect_contains": ["monthly_dosing", "where_rabivy_wins", "positioning_summary"]},
-    {"q": "What does a typical endocrinologist look like?",
+    {"group": "RAG - narrative knowledge base",
+     "q": "What does a typical endocrinologist look like?",
      "cat": "narrative (benchmark)", "mode": "full",
      "expect_engine": "RAG", "expect_contains": "endocrinology"},
-    {"q": "How is prior authorization affecting access?",
+    {"group": "RAG - narrative knowledge base",
+     "q": "How is prior authorization affecting access?",
      "cat": "narrative", "mode": "full",
      "expect_engine": "RAG", "expect_contains": ["prior_auth", "access"]},
-    {"q": "Why do patients stop taking GLP-1s after a year?",
+    {"group": "RAG - narrative knowledge base",
+     "q": "Why do patients stop taking GLP-1s after a year?",
      "cat": "narrative", "mode": "full",
      "expect_engine": "RAG", "expect_contains": ["why_patients_discontinue", "persistence", "discontinue"]},
 
-    # ---- Multi-source showpiece (structured + narrative + LLM) ----
-    {"q": "Who should I target next month in New York, and what should I say to them?",
+    # =================================================================
+    # GROUP 5: MULTI-SOURCE (structured + narrative + LLM, all at once)
+    # =================================================================
+    {"group": "MULTI-SOURCE (structured + narrative + LLM)",
+     "q": "Who should I target next month in New York, and what should I say to them?",
      "cat": "multi-source showpiece", "mode": "llm",
      "expect_engine": "RAG",
      "note": "the showpiece: joins targeting + messaging - pure LLM synthesis. "
-             "'who should I target' is now recognised (routes plain targeting "
+             "'who should I target' is recognised (routes plain targeting "
              "questions to STRUCTURED), but this question ALSO asks 'what "
              "should I say to them' - a deliberate guard backs off the "
              "structured trigger when messaging language is present, so this "
              "correctly still falls to RAG instead of silently dropping the "
              "messaging half of the question"},
 
-    # ---- Not-found / error-handling (2026-07-22): moved here from
-    # test_router.py so both files share one question set. These SHOULD
-    # come back empty/not-found - what's actually being checked is that
-    # the router fails LOUDLY and CORRECTLY on nonsense input instead of
-    # silently guessing or matching the wrong thing. ----
-    {"q": "Tell me about NPI 0000000000.",
+    # =================================================================
+    # GROUP 6: EDGE CASES - not-found, nonsense input & synonym mapping
+    # These SHOULD come back empty/not-found or remapped - what's being
+    # checked is that the router fails LOUDLY and CORRECTLY on bad input
+    # instead of silently guessing or matching the wrong thing.
+    # =================================================================
+    {"group": "EDGE CASES - not-found, nonsense input & synonym mapping",
+     "q": "Tell me about NPI 0000000000.",
      "cat": "not-found (fake NPI)", "mode": "full",
      "expect_engine": "RAG", "expect_contains": "no hcp card found",
      "note": "fake NPI - must say clearly not found, never fall through "
              "to an unrelated semantic search"},
-    {"q": "Which HCPs are in the Southeast region?",
+    {"group": "EDGE CASES - not-found, nonsense input & synonym mapping",
+     "q": "Which HCPs are in the Southeast region?",
      "cat": "not-found (fake region)", "mode": "full",
      "expect_engine": "STRUCTURED", "expect_contains": "not a real region",
      "note": "'Southeast' isn't a real region in this data - must reject "
              "explicitly rather than silently matching zero rows with no "
              "explanation"},
-    {"q": "Which HCPs have a Low tier?",
+    {"group": "EDGE CASES - not-found, nonsense input & synonym mapping",
+     "q": "Which HCPs have a Low tier?",
      "cat": "tier synonym mapping", "mode": "full",
      "expect_engine": "STRUCTURED", "expect_contains": "watch",
      "note": "'Low' isn't a real tier value - should map to 'Watch' (the "
              "real bottom tier) and return actual matches, not error out "
              "or silently return zero results"},
-
-    # ---- Generic numeric threshold on a non-0-1 column (2026-07-22) ----
-    # Every other question either does an exact lookup/rank, or a 0-1
-    # SCORE level ("high propensity"). None exercise the separate,
-    # deliberately generic code path for a plain "more than N" on an
-    # ordinary numeric column (days_since_contact, rx_volume_monthly,
-    # etc.) - built to auto-cover any future numeric column, but never
-    # actually tested end-to-end until now. mode is "llm" (routing-only)
-    # rather than "full", since the exact row count depends on live
-    # data and isn't safe to hardcode as an expected value here.
-    {"q": "Which HCPs have days since contact over 90?",
+    {"group": "EDGE CASES - not-found, nonsense input & synonym mapping",
+     "q": "Which HCPs have days since contact over 90?",
      "cat": "generic numeric threshold", "mode": "llm",
      "expect_engine": "STRUCTURED",
      "note": "exercises _detect_generic_numeric_filters on "
-             "days_since_contact - the generic 'above/below a real "
-             "number' path, not the high/moderate/low 0-1 score path. "
-             "PHRASING MATTERS HERE (found 2026-07-22, testing this): the "
-             "column phrase must come BEFORE the operator+number "
-             "('days since contact over 90' works; 'more than 90 days "
-             "since contact' does not - regex requires phrase-then-op-"
-             "then-number, no wildcard for word order). The column-match "
-             "regex is also strict about filler words - it's built "
-             "straight from the literal column name (days[ _-]+since"
-             "[ _-]+contact), unlike COLUMN_SYNONYMS elsewhere in this "
-             "file which explicitly tolerates 'days since (last) "
-             "contact'. Real, untracked limitation - this generic "
-             "fallback is more rigid than the purpose-built detectors "
-             "next to it. Worth a proper fix later, not blocking now."},
+             "days_since_contact - the generic 'above/below a real number' "
+             "path, not the high/moderate/low 0-1 score path. mode is "
+             "'llm' (routing-only) since the exact row count depends on "
+             "live data. PHRASING MATTERS (found 2026-07-22): the column "
+             "phrase must come BEFORE the operator+number ('days since "
+             "contact over 90' works; 'more than 90 days since contact' "
+             "does not - no wildcard for word order). Also strict about "
+             "filler words - built straight from the literal column name, "
+             "unlike COLUMN_SYNONYMS elsewhere which tolerates 'days since "
+             "(last) contact'. Real, untracked limitation - worth a proper "
+             "fix later, not blocking now."},
 ]
 
 
@@ -285,21 +318,63 @@ def _retrieved_chunk_ids(data):
     return None
 
 
+_BAR = "=" * 72
+_THIN = "-" * 72
+
+
+def _print_group_banner(group_name):
+    """Printed once, the first time a question from a new group appears
+    - this is what replaces the old flat list with the newest questions
+    looking bolted onto the end. Each group is now a clearly labelled
+    section instead of one long undifferentiated scroll."""
+    print("\n" + _BAR)
+    print(f"  {group_name}")
+    print(_BAR)
+
+
+def _print_result(n, t, status, route_detail, note, answer_text, retrieved, error_text=None):
+    """One question, one fully enclosed box. The question text itself
+    is front and center in the header line (not hidden under a
+    'QUESTION:' label further down) - Q# / question / STATUS, then a
+    separator, then ROUTE/NOTE/ANSWER, then a closing border."""
+    print(f"\n{_THIN}")
+    print(f"Q{n}: {t['q']} - {status}")
+    print(_THIN)
+    if route_detail:
+        print(f"  ROUTE    : {route_detail}")
+    if note:
+        print(f"  NOTE     : {note}")
+    if retrieved is not None:
+        print(f"  RETRIEVED: {[c[:40] for c in retrieved]}")
+    if error_text:
+        print(f"  ERROR    : {error_text}")
+    if answer_text is not None:
+        print(f"  ANSWER   :")
+        for line in answer_text.splitlines():
+            print(f"    {line}")
+    print(_THIN)
+
+
 def run(tests, header):
     print("\n" + "#" * 72)
     print(f"# {header}")
     print("#" * 72)
     tally = {"PASS": 0, "FAIL": 0, "ROUTES->LLM": 0, "NEEDS-LLM": 0, "CRASH": 0}
     records = []
+    last_group = None
 
-    for t in tests:
+    for i, t in enumerate(tests, start=1):
+        group = t.get("group")
+        if group and group != last_group:
+            _print_group_banner(group)
+            last_group = group
+
         try:
             engine, data = ask_a_question.ask(t["q"])
         except Exception as e:
             tally["CRASH"] += 1
-            print(f"\n[CRASH      ] ({t['cat']})")
-            print(f"   Q: {t['q']}")
-            print(f"   -> {type(e).__name__}: {e}")
+            _print_result(i, t, "CRASH", None, None, None, None,
+                          error_text=f"{type(e).__name__}: {e}")
             records.append({**t, "status": "CRASH", "error": str(e)})
             continue
 
@@ -308,37 +383,37 @@ def run(tests, header):
         if t["mode"] == "full":
             correct = _matches_any(data, t["expect_contains"])
             status = "PASS" if (routed and correct) else "FAIL"
-            detail = "" if status == "PASS" else (
-                f"(routed to '{engine}')" if not routed else "(right engine, fact missing)")
+            route_detail = engine if status == "PASS" else (
+                f"{engine} (WRONG - expected {t['expect_engine']})" if not routed
+                else f"{engine} (right engine, but expected fact missing)")
 
         elif t["mode"] == "retrieval":
             got = _matches_any(data, t["expect_retrieves"])
             status = "ROUTES->LLM" if (routed and got) else "FAIL"
-            detail = "retrieved the right data; answer text needs LLM" if status == "ROUTES->LLM" else \
-                     (f"(routed to '{engine}')" if not routed else "(did not retrieve expected item)")
+            route_detail = f"{engine} - retrieved correctly, answer text needs LLM" if status == "ROUTES->LLM" else (
+                f"{engine} (WRONG - expected {t['expect_engine']})" if not routed
+                else f"{engine} (did not retrieve expected item)")
 
         else:  # "llm" - now actually checks routing, doesn't rubber-stamp it
             status = "NEEDS-LLM" if routed else "FAIL"
-            detail = f"routes to '{engine}' | {t.get('note', '')}" if routed else \
-                     f"MIS-ROUTED: expected '{t['expect_engine']}', got '{engine}' | {t.get('note', '')}"
+            route_detail = engine if routed else f"{engine} (WRONG - expected {t['expect_engine']})"
 
         tally[status] = tally.get(status, 0) + 1
-        print(f"\n[{status:11s}] ({t['cat']})")
-        print(f"   Q: {t['q']}")
-        if detail:
-            print(f"   -> {detail}")
+
         retrieved = _retrieved_chunk_ids(data)
-        if retrieved is not None:
-            print(f"   retrieved: {[c[:40] for c in retrieved]}")
-        # Plain-English answer, same as test_router.py used to show
-        # separately - folded in here (2026-07-22) so one run gives you
-        # both the scored PASS/FAIL AND the actual sentence a rep would
-        # see, instead of needing a second file/run to eyeball it.
         try:
-            answer = ask_a_question.format_answer(engine, data)
-            print(f"   answer: {answer}")
+            answer_text = ask_a_question.format_answer(engine, data)
         except Exception as e:
-            print(f"   !! format_answer() raised an exception: {type(e).__name__}: {e}")
+            answer_text = None
+            note_extra = f"!! format_answer() raised {type(e).__name__}: {e}"
+        else:
+            note_extra = None
+
+        note = t.get("note")
+        if note_extra:
+            note = f"{note} | {note_extra}" if note else note_extra
+
+        _print_result(i, t, status, route_detail, note, answer_text, retrieved)
         records.append({**t, "status": status, "engine": engine})
 
     return tally, records
@@ -379,7 +454,7 @@ if f == 0 and c == 0:
     print("Nothing here is actually broken. Everything either works today, or")
     print("is correctly waiting on a piece that hasn't been built yet.")
 else:
-    print("Some of these need attention - see [FAIL] / [CRASH] lines above for")
+    print("Some of these need attention - see FAIL / CRASH blocks above for")
     print("which specific questions and why.")
 print("=" * 72)
 
