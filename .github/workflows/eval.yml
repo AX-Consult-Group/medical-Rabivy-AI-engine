@@ -1,0 +1,55 @@
+# Phase 5, completed: the golden-set evaluation now runs AUTOMATICALLY on
+# every push and pull request - the scope doc's "runs automatically whenever
+# the underlying data or models change" requirement. A change that breaks
+# routing, retrieval, or the agent loop turns the commit red before it
+# reaches anyone.
+#
+# Runs in MOCK mode: free (no API key in CI), deterministic, and it tests
+# the machinery - tool selection, retrieval, the loop - which is what a
+# regression gate is for. Full answer-quality runs with a real LLM remain a
+# deliberate manual step (test_the_agent.py with ANTHROPIC_API_KEY set).
+#
+# No torch/sentence-transformers in CI: embedding_backend.py detects the
+# missing package and falls back to the offline TF-IDF/LSA backend, which
+# is exactly what that fallback exists for.
+
+name: agent-eval
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  golden-set:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies (CI subset - no torch)
+        run: pip install pandas openpyxl numpy scikit-learn joblib
+
+      - name: Build the knowledge base (chunk -> tag -> embed)
+        run: python main.py
+
+      - name: Baseline eval - original regex router (informational)
+        run: python test_the_system.py || true
+
+      - name: Agent golden-set eval (mock mode) - THE gate
+        env:
+          AGENT_LLM: mock
+        run: python test_the_agent.py
+
+      - name: Keep eval history as build artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-runs
+          path: eval_runs/
+          if-no-files-found: ignore

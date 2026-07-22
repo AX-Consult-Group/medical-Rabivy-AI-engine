@@ -1,0 +1,12 @@
+# Core pipeline (existing)
+pandas
+openpyxl
+numpy
+sentence-transformers   # primary embedding model (all-MiniLM-L6-v2)
+
+# Offline embedding fallback (embedding_backend.py)
+scikit-learn
+joblib
+
+# Agentic layer
+anthropic
