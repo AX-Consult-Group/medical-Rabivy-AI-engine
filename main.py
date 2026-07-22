@@ -57,6 +57,21 @@ print("=" * 60)
 print("Rebuilding the RAG knowledge base")
 print("=" * 60)
 
+# ---- Stage 0: score-consistency guard (propensity_model.py) --------
+# Before building anything on top of the master spreadsheet, confirm
+# its stored scores are what the Phase 2 scoring model would produce
+# for its raw inputs. Catches the silent-drift failure mode: a data
+# refresh whose propensity scores were never recomputed would otherwise
+# flow into the knowledge base looking perfectly healthy. If this
+# fails: re-score the raw batch (python propensity_model.py --score
+# <raw.xlsx>) or resolve the weight mismatch before ingesting.
+print("\n>>> Stage 0: verifying propensity scores against the scoring model ...")
+guard = subprocess.run([sys.executable, "propensity_model.py", "--verify"])
+if guard.returncode != 0:
+    print("\n!!! Score verification failed - the spreadsheet's scores do not "
+          "match the scoring model. Pipeline stopped before ingestion.")
+    sys.exit(1)
+
 for stage in STAGES:
     script = stage["script"]
     print(f"\n>>> Running {script} ...")
