@@ -24,6 +24,15 @@
 # so a phrasing/formatting change in query_spreadsheet.py's or
 # ask_a_question.py's format_* layer can't silently break this eval
 # for the wrong reason.
+#
+# ALSO PRINTS THE ACTUAL ANSWER (2026-07-22): this file used to only
+# show the scored PASS/FAIL, and a separate file (test_router.py) ran
+# the same questions again just to print the real sentence a rep would
+# see. That meant one shared question set living in two files, which is
+# exactly how a stale test slipped through unnoticed once (see the
+# CLARIFICATION fix below). Now every run prints the score AND the
+# actual formatted answer together - test_router.py has been retired,
+# this file replaces it entirely.
 # ===================================================================
 
 import json
@@ -97,10 +106,15 @@ TESTS = [
              "correctly; step 2 (read their card) and synthesis aren't wired"},
     {"q": "Why is this High-tier doctor not converting?",
      "cat": "card read", "mode": "llm",
-     "expect_engine": "RAG",
-     "note": "no NPI/state in the question itself - nothing to structurally "
-             "resolve to a single HCP without conversational context, so RAG "
-             "fallback is the honest outcome here"},
+     "expect_engine": "CLARIFICATION",
+     "note": "no NPI given and no prior HCP in context - same unresolved-"
+             "referent case as 'Is this doctor...' elsewhere in this list. "
+             "Updated 2026-07-22: this used to fall through to a weak RAG "
+             "guess (top match ~0.30) because the old regex only caught "
+             "'this doctor' with nothing in between - 'this High-tier "
+             "doctor' slipped past it. Fixed by allowing up to 3 words "
+             "between 'this/that' and the noun (see "
+             "_UNRESOLVED_REFERENT_PATTERNS in ask_a_question.py)."},
     {"q": "What's the story on GLP-1 writers in Arizona - who should I know about?",
      "cat": "card narrative", "mode": "llm",
      "expect_engine": "RAG",
@@ -114,8 +128,12 @@ TESTS = [
              "comparison to a benchmark needs LLM"},
     {"q": "Is this doctor a high or low prescriber for their specialty?",
      "cat": "comparison", "mode": "llm",
-     "expect_engine": "RAG",
-     "note": "needs HCP in context + benchmark + LLM"},
+     "expect_engine": "CLARIFICATION",
+     "note": "no NPI given and no prior HCP in context - correctly asks "
+             "for clarification instead of guessing (see "
+             "_has_unresolved_referent in ask_a_question.py). Updated "
+             "2026-07-22: this test predates that guard, which used to "
+             "expect a silent fall-through to RAG."},
 
     # ---- RAG strategic & narrative (fully working: right chunk retrieved) ----
     {"q": "What's our recommended messaging for competitive switchers?",
@@ -169,7 +187,59 @@ TESTS = [
              "structured trigger when messaging language is present, so this "
              "correctly still falls to RAG instead of silently dropping the "
              "messaging half of the question"},
+
+    # ---- Not-found / error-handling (2026-07-22): moved here from
+    # test_router.py so both files share one question set. These SHOULD
+    # come back empty/not-found - what's actually being checked is that
+    # the router fails LOUDLY and CORRECTLY on nonsense input instead of
+    # silently guessing or matching the wrong thing. ----
+    {"q": "Tell me about NPI 0000000000.",
+     "cat": "not-found (fake NPI)", "mode": "full",
+     "expect_engine": "RAG", "expect_contains": "no hcp card found",
+     "note": "fake NPI - must say clearly not found, never fall through "
+             "to an unrelated semantic search"},
+    {"q": "Which HCPs are in the Southeast region?",
+     "cat": "not-found (fake region)", "mode": "full",
+     "expect_engine": "STRUCTURED", "expect_contains": "not a real region",
+     "note": "'Southeast' isn't a real region in this data - must reject "
+             "explicitly rather than silently matching zero rows with no "
+             "explanation"},
+    {"q": "Which HCPs have a Low tier?",
+     "cat": "tier synonym mapping", "mode": "full",
+     "expect_engine": "STRUCTURED", "expect_contains": "watch",
+     "note": "'Low' isn't a real tier value - should map to 'Watch' (the "
+             "real bottom tier) and return actual matches, not error out "
+             "or silently return zero results"},
+
+    # ---- Generic numeric threshold on a non-0-1 column (2026-07-22) ----
+    # Every other question either does an exact lookup/rank, or a 0-1
+    # SCORE level ("high propensity"). None exercise the separate,
+    # deliberately generic code path for a plain "more than N" on an
+    # ordinary numeric column (days_since_contact, rx_volume_monthly,
+    # etc.) - built to auto-cover any future numeric column, but never
+    # actually tested end-to-end until now. mode is "llm" (routing-only)
+    # rather than "full", since the exact row count depends on live
+    # data and isn't safe to hardcode as an expected value here.
+    {"q": "Which HCPs have days since contact over 90?",
+     "cat": "generic numeric threshold", "mode": "llm",
+     "expect_engine": "STRUCTURED",
+     "note": "exercises _detect_generic_numeric_filters on "
+             "days_since_contact - the generic 'above/below a real "
+             "number' path, not the high/moderate/low 0-1 score path. "
+             "PHRASING MATTERS HERE (found 2026-07-22, testing this): the "
+             "column phrase must come BEFORE the operator+number "
+             "('days since contact over 90' works; 'more than 90 days "
+             "since contact' does not - regex requires phrase-then-op-"
+             "then-number, no wildcard for word order). The column-match "
+             "regex is also strict about filler words - it's built "
+             "straight from the literal column name (days[ _-]+since"
+             "[ _-]+contact), unlike COLUMN_SYNONYMS elsewhere in this "
+             "file which explicitly tolerates 'days since (last) "
+             "contact'. Real, untracked limitation - this generic "
+             "fallback is more rigid than the purpose-built detectors "
+             "next to it. Worth a proper fix later, not blocking now."},
 ]
+
 
 # Previously tracked here as a known gap: "Why do patients stop taking
 # GLP-1s after a year?" used to return zero results, because "top " (from
@@ -260,6 +330,15 @@ def run(tests, header):
         retrieved = _retrieved_chunk_ids(data)
         if retrieved is not None:
             print(f"   retrieved: {[c[:40] for c in retrieved]}")
+        # Plain-English answer, same as test_router.py used to show
+        # separately - folded in here (2026-07-22) so one run gives you
+        # both the scored PASS/FAIL AND the actual sentence a rep would
+        # see, instead of needing a second file/run to eyeball it.
+        try:
+            answer = ask_a_question.format_answer(engine, data)
+            print(f"   answer: {answer}")
+        except Exception as e:
+            print(f"   !! format_answer() raised an exception: {type(e).__name__}: {e}")
         records.append({**t, "status": status, "engine": engine})
 
     return tally, records

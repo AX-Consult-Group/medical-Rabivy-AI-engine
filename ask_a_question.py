@@ -290,9 +290,20 @@ def _detect_zero_writer(ql):
 # This system only ever identifies a specific HCP by their 10-digit
 # NPI (no proper names appear anywhere in the data), so "no NPI in
 # the question" is a reliable stand-in for "no name given" here.
+#
+# Fix (2026-07-22): "this doctor" and "that doctor" now tolerate up to
+# 3 words in between ("this High-tier doctor", "that untargeted HCP")
+# instead of requiring the exact adjacent phrase. Found via testing:
+# "Is this doctor..." correctly triggered clarification, but "Why is
+# this High-tier doctor not converting?" silently fell through to a
+# weak RAG guess instead - same referent problem, just with one
+# adjective in the way. Same class of bug as the days_since_contact
+# generic-numeric-filter rigidity found the same day: a literal,
+# adjacent-words-only regex missing anything with a normal modifier
+# in between.
 _UNRESOLVED_REFERENT_PATTERNS = [
-    re.compile(r"\bthis (?:doctor|hcp|physician|prescriber|provider)\b"),
-    re.compile(r"\bthat (?:doctor|hcp|physician|prescriber|provider)\b"),
+    re.compile(r"\bthis\s+(?:[\w-]+\s+){0,3}(?:doctor|hcp|physician|prescriber|provider)\b"),
+    re.compile(r"\bthat\s+(?:[\w-]+\s+){0,3}(?:doctor|hcp|physician|prescriber|provider)\b"),
     re.compile(r"\bhim\b"), re.compile(r"\bher\b"),
     re.compile(r"\bhe\b"), re.compile(r"\bshe\b"),
 ]

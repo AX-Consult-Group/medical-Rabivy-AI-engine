@@ -13,7 +13,7 @@
 import json
 import os
 import numpy as np
-from sentence_transformers import SentenceTransformer
+from embedding_backend import get_build_backend
 
 # STEP 1: Load the tagged chunks.
 with open("output/chunks_tagged.json", "r", encoding="utf-8") as f:
@@ -32,22 +32,24 @@ if empty_ids:
         f"(first 10 shown): {empty_ids[:10]}"
     )
 
-# STEP 3: Load the embedding model.
+# STEP 3: Load the embedding backend.
 # v1 choice: all-MiniLM-L6-v2 is a solid general-purpose default for
 # prototyping, not a medical/pharma-tuned model. Worth revisiting (a
 # domain-tuned model, a bigger one, or a hosted embedding API) once this
 # moves off simulated data.
 # The FIRST time you run this it downloads a ~90MB model, then caches it.
-MODEL_NAME = "all-MiniLM-L6-v2"
-print("Loading embedding model (first run downloads ~90MB, please wait)...")
-model = SentenceTransformer(MODEL_NAME)
+# If the model can't be downloaded at all (offline/sandboxed machine),
+# embedding_backend.py falls back to an offline TF-IDF+LSA backend and
+# records that choice in embedding_meta.json so search stays consistent.
+model = get_build_backend()
+MODEL_NAME = model.name
 
 # STEP 4: Collect the text of every chunk into a list.
 texts = [c["text"] for c in chunks]
 
 # STEP 5: Convert every text into a vector.
 print("Embedding chunks...")
-embeddings = model.encode(texts, show_progress_bar=True)
+embeddings = model.fit_encode(texts)
 
 # STEP 6: Save the vectors. Row order matches chunks_tagged.json exactly.
 os.makedirs("output", exist_ok=True)
