@@ -231,7 +231,8 @@ TESTS = [
      "expect_tools": ["query_hcp_table"],
      "expect_facts": [["not one of", "not a real region", "not an official",
                         "isn't a defined region", "4 real regions",
-                        "midwest, northeast, south"]],
+                        "midwest, northeast, south", "not a real value for",
+                        "valid values are"]],
      "note": "'Southeast' isn't a real region in this data (only Midwest/"
              "Northeast/South/West exist) - tightened 2026-07-22: this "
              "used to just check the word 'southeast' appeared anywhere, "
@@ -331,7 +332,7 @@ def run():
     mode = "MOCK (behavioural checks)" if is_mock else "REAL (answer + verification checks)"
     print(f"\nAgent eval mode: {mode}")
 
-    tally = {"PASS": 0, "WEAK": 0, "FAIL": 0, "CRASH": 0}
+    tally = {"PASS": 0, "WEAK": 0, "FAIL": 0, "CRASH": 0, "N/A IN MOCK": 0}
     records = []
     last_group = None
 
@@ -358,6 +359,26 @@ def run():
 
         tools_used = [s["tool"] for s in res["steps"]]
         expected_tools = t["expect_tools"]
+        # Reconciled 2026-07-23: expect_tools=[] means "the correct
+        # behaviour is asking for clarification, not calling a tool" -
+        # but that requires actually understanding the question is
+        # ambiguous, which MockLLM's simple keyword-based planner has no
+        # way to do. It always calls SOME tool (whichever keyword signal
+        # matched, or search_documents as the fallback) - it can never
+        # genuinely produce "no tool call" in mock mode. So in mock
+        # mode, these 2 tests are marked informational (N/A), not scored
+        # as FAIL - same treatment MEMORY_SCENARIO's second step already
+        # gets for the identical reason. Real mode (actual Claude) can
+        # and should still be held to this expectation properly.
+        if is_mock and not expected_tools:
+            tally["N/A IN MOCK"] += 1
+            _print_result(t, "N/A IN MOCK", tools_used, res["steps"], None, False,
+                          (t.get("note") or "") + " | mock mode can't recognise "
+                          "ambiguity without calling a tool - needs a real LLM "
+                          "to test this properly",
+                          _evidence_text(res)[:800])
+            records.append({**t, "status": "N/A IN MOCK", "tools_used": tools_used})
+            continue
         # Empty expect_tools means NO tool call is the correct behaviour
         # (the two unresolved-referent questions) - right_tools is True
         # only if tools_used is ALSO empty in that case.
@@ -428,6 +449,8 @@ def run():
     print(f"  WEAK  (right tools, fact missing)  : {tally['WEAK']} / {total}")
     print(f"  FAIL  (wrong tool selection)       : {tally['FAIL']} / {total}")
     print(f"  CRASH                              : {tally['CRASH']} / {total}")
+    if tally["N/A IN MOCK"]:
+        print(f"  N/A IN MOCK (needs real LLM)       : {tally['N/A IN MOCK']} / {total}")
     print(f"  memory scenario                    : {mem_status}")
     if is_mock:
         print("\n  NOTE: mock mode checks agent behaviour (tool selection +")

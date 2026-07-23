@@ -192,6 +192,22 @@ class MockLLM:
         pa_level, pa_range = aq._detect_pa_burden(ql)
         has_rank = any(p.search(ql) for p in aq.RANK_PATTERNS)
         hcp_ctx = aq._has_hcp_context(ql)
+        # Reconciled 2026-07-23: structured_signal was missing 3 real
+        # triggers entirely - tier, region, and generic numeric filters
+        # (e.g. "days since contact"). A question that ONLY mentions one
+        # of these (no targeted/switching/competitor/etc alongside it)
+        # fell all the way through to search_documents with nothing to
+        # find, silently. Caught by CI once the matching edge-case tests
+        # were added to test_the_agent.py - these 3 questions never had
+        # any other signal to lean on, so the gap had nothing to hide
+        # behind. tier_signal checks BOTH a real tier and an invalid
+        # region attempt (e.g. "Southeast") - the tool itself validates
+        # and rejects invalid values correctly (see filter_hcps()), so
+        # passing an invalid one through is the right behaviour, not a
+        # bug to special-case here.
+        tier_signal = aq._detect_tier(ql)
+        region_signal = aq._detect_region(ql) or aq._detect_invalid_region_attempt(ql)
+        numeric_filters = aq._detect_generic_numeric_filters(ql)
         structured_signal = (targeted is not None
                              or switching_level is not None or switching_range is not None
                              or (competitor and hcp_ctx) or (formulary and hcp_ctx)
@@ -199,14 +215,18 @@ class MockLLM:
                              or ((pa_level is not None or pa_range is not None) and hcp_ctx)
                              or (has_rank and hcp_ctx)
                              or aq._is_forward_targeting_question(ql)
-                             or (multi_part and "target" in ql))
+                             or (multi_part and "target" in ql)
+                             or tier_signal is not None
+                             or region_signal is not None
+                             or bool(numeric_filters))
         if structured_signal:
             import query_spreadsheet as qs  # for HIGH_CUTOFF/LOW_CUTOFF - level word -> real number
             table_input = {}
             st = aq._find_state(ql)
             spec = aq._detect_specialty(ql)
-            tier = aq._detect_tier(ql)
+            tier = tier_signal
             if st: table_input["state"] = st
+            elif region_signal: table_input["region"] = region_signal
             if spec: table_input["specialty"] = spec
             if tier: table_input["tier"] = tier
             if targeted is not None: table_input["targeted"] = bool(targeted)
@@ -236,6 +256,11 @@ class MockLLM:
 
             _add_level_filter("switching_score", switching_level, switching_range)
             _add_level_filter("pa_burden", pa_level, pa_range)
+            # generic numeric filters (e.g. days_since_contact) - a
+            # column: (min, max) dict, same shape _add_level_filter
+            # produces per-item, just merged in directly here
+            for col, (lo, hi) in numeric_filters.items():
+                extra_filters.append({"column": col, "min": lo, "max": hi})
             if extra_filters:
                 table_input["extra_filters"] = extra_filters
 

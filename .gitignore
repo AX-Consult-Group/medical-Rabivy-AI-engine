@@ -2,3 +2,4 @@ output/
 __pycache__/
 *.pyc
 eval_runs/
+data/simulated_launch_outcomes.csv
