@@ -17,7 +17,7 @@ Both paths share the exact same two underlying engines, so neither one can drift
 
 ## The full pipeline, visually
 
-![Graphic breakdown of the full AI engine pipeline](figures/rabivy_layered_schematic_V3.svg)
+![Graphic breakdown of the full AI engine pipeline](figures/rabivy_layered_schematic_V4.svg)
 
 Every file below is arranged in layers - each layer only ever talks to the layer directly above or below it. Read top to bottom.
 
