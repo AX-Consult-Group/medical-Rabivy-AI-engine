@@ -73,6 +73,11 @@ TOOL_SCHEMAS = [
             "type": "object",
             "properties": {
                 "state": {"type": "string", "description": "Full state name, e.g. 'New York'"},
+                "region": {"type": "string", "enum": ["Midwest", "Northeast", "South", "West"],
+                           "description": ("Use for a real region name. Only these 4 exist - "
+                                          "for anything else ('Southeast', 'Pacific Northwest'), "
+                                          "use state instead, one call per state, and say you're "
+                                          "doing that rather than presenting it as an official region.")},
                 "specialty": {"type": "string",
                               "enum": ["Endocrinology", "Primary Care", "Obesity Medicine"]},
                 "tier": {"type": "string", "enum": ["High", "Medium", "Watch"],
@@ -199,6 +204,7 @@ def _query_hcp_table(inp):
     top = min(int(inp.get("top", 10)), 25)
     data = query_spreadsheet.filter_hcps(
         state=inp.get("state"),
+        region=inp.get("region"),
         specialty=inp.get("specialty"),
         tier=inp.get("tier"),
         targeted=(None if inp.get("targeted") is None else int(inp["targeted"])),
