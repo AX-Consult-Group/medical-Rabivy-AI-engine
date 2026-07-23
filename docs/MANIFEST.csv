@@ -11,3 +11,4 @@ clinical/rabivy_clinical_summary.md,Rabivy clinical summary,1 doc,chunk_by_secti
 clinical/glp1_class_overview.md,GLP-1 class overview,1 doc,chunk_by_section,Clinical publications,2736
 clinical/real_world_evidence_brief.md,Real-world evidence brief,1 doc,chunk_by_section,Clinical publications / RWE,2437
 competitive_feed/ (folder),Competitive intelligence feed items,rolling,chunk_by_section,"External signals ingested by intel_digest.py (simulated in demo)",8000
+Reviewers: Tilabo → don't merge
