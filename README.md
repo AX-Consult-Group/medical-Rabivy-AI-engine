@@ -6,8 +6,8 @@ This is a natural-language question-answering tool for a pharmaceutical sales te
 
 It works two ways, both included in this repo:
 
-- **A fast, free, deterministic router** (`ask_a_question.py`) - handles a question by matching keywords with regex, then calling one of two engines directly. No AI involved in the routing itself, so it's instant and costs nothing to run.
-- **An AI agent** (`agent.py`) - actually understands the question, decides which tool(s) to call (possibly several, chained together), and writes a real answer in its own words - while still only ever using real numbers pulled from the two engines, never inventing one.
+- **A fast, free, deterministic router** - handles a question by matching keywords with regex, then calling one of two engines directly. No AI involved in the routing itself, so it's instant and costs nothing to run.
+- **An AI agent** - actually understands the question, decides which tool(s) to call (possibly several, chained together), and writes a real answer in its own words - while still only ever using real numbers pulled from the two engines, never inventing one.
 
 Both paths share the exact same two underlying engines, so neither one can drift out of sync with what the data actually says.
 
