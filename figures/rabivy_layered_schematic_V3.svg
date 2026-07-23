@@ -1,0 +1,283 @@
+<svg viewBox="0 0 1450 2200" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif">
+<defs>
+  <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#B5AFEB"/>
+  </marker>
+  <marker id="arrowOrange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#E8A33D"/>
+  </marker>
+  <marker id="arrowRed" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+    <path d="M0,0 L10,5 L0,10 z" fill="#D85A30"/>
+  </marker>
+</defs>
+<rect x="0" y="0" width="1450" height="2200" fill="#FFFFFF"/>
+<text x="40" y="42" font-size="24" font-weight="700" fill="#3D3870">Graphic breakdown of the full AI engine pipeline</text>
+<text x="40" y="64" font-size="13" fill="#7F77DD">Layer-by-layer breakdown of each file in the AI engine, showing how each layer talks to the one above and below it</text>
+
+<!-- ===================== LAYER 1: build the pieces ===================== -->
+<text x="40" y="98" font-size="12.5" font-weight="700" fill="#3D3870">Layer 1 - turn raw docs into searchable pieces</text>
+<rect x="330" y="110" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="330" y="110" width="220" height="6" fill="#7F77DD"/>
+<circle cx="550" cy="110" r="18" fill="#7F77DD"/>
+<text x="550" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<text x="342" y="156" font-size="13.5" font-weight="700" fill="#3D3870">1_chunk_documents.py</text>
+<text x="342" y="170" font-size="11" fill="#5A52B8">Splits every source document into</text>
+<text x="342" y="186" font-size="11" fill="#5A52B8">small, labeled, searchable pieces</text>
+<text x="342" y="202" font-size="11" fill="#5A52B8">- one per section or HCP card.</text>
+<text x="342" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: each HCP card's NPI must be</text>
+<text x="342" y="242" font-size="10" font-style="italic" fill="#A85D12">a real 10-digit number, or NPI lookups</text>
+<text x="342" y="257" font-size="10" font-style="italic" fill="#A85D12">fail silently later</text>
+
+<rect x="590" y="110" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="590" y="110" width="220" height="6" fill="#7F77DD"/>
+<circle cx="810" cy="110" r="18" fill="#7F77DD"/>
+<text x="810" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<text x="602" y="156" font-size="13.5" font-weight="700" fill="#3D3870">2_tag_chunks.py</text>
+<text x="602" y="170" font-size="11" fill="#5A52B8">Adds extra labels to each piece -</text>
+<text x="602" y="186" font-size="11" fill="#5A52B8">which competitor or brand it</text>
+<text x="602" y="202" font-size="11" fill="#5A52B8">mentions, if any.</text>
+<text x="602" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: whole-word matching only</text>
+<text x="602" y="242" font-size="10" font-style="italic" fill="#A85D12">(avoids false hits like Lillyanne)</text>
+
+<rect x="850" y="110" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="850" y="110" width="220" height="6" fill="#7F77DD"/>
+<circle cx="1070" cy="110" r="18" fill="#7F77DD"/>
+<text x="1070" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">3</text>
+<text x="862" y="156" font-size="13.5" font-weight="700" fill="#3D3870">3_create_embeddings.py</text>
+<text x="862" y="170" font-size="11" fill="#5A52B8">Converts each labeled piece into a</text>
+<text x="862" y="186" font-size="11" fill="#5A52B8">list of numbers capturing its</text>
+<text x="862" y="202" font-size="11" fill="#5A52B8">meaning - for search-by-meaning.</text>
+<text x="862" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: downloads a small AI model</text>
+<text x="862" y="242" font-size="10" font-style="italic" fill="#A85D12">(~90MB) - needs internet once</text>
+
+<!-- ===== embedding_backend.py - shared dependency, not a pipeline step ===== -->
+<!-- Not sequential: BOTH box 3 (build time) and box 6 search_documents.py -->
+<!-- (query time, Layer 4) call into this independently. Dashed box style -->
+<!-- matches the other "standalone" boxes at the bottom for the same reason. -->
+<rect x="1130" y="110" width="220" height="200" rx="6" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="1.5" stroke-dasharray="5,4"/>
+<text x="1146" y="138" font-size="13" font-weight="700" fill="#444441">embedding_backend.py</text>
+<text x="1146" y="156" font-size="11" fill="#5F5E5A">A backup for when the real embedding</text>
+<text x="1146" y="172" font-size="11" fill="#5F5E5A">model can't run - specifically why the</text>
+<text x="1146" y="188" font-size="11" fill="#5F5E5A">eval code works on GitHub, since GitHub</text>
+<text x="1146" y="204" font-size="11" fill="#5F5E5A">Actions has no internet to download it.</text>
+<text x="1146" y="226" font-size="10" font-style="italic" fill="#A85D12">Normal: all-MiniLM-L6-v2, same as</text>
+<text x="1146" y="240" font-size="10" font-style="italic" fill="#A85D12">before. Falls back to offline TF-IDF</text>
+<text x="1146" y="254" font-size="10" font-style="italic" fill="#A85D12">+LSA only if that model can't load -</text>
+<text x="1146" y="268" font-size="10" font-style="italic" fill="#A85D12">recorded in embedding_meta.json so</text>
+<text x="1146" y="282" font-size="10" font-style="italic" fill="#A85D12">query time always matches build time</text>
+
+<!-- build-time call: box 3 -> embedding_backend (get_build_backend) -->
+<line x1="1070" y1="195" x2="1130" y2="195" stroke="#7F77DD" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+<text x="1100" y="188" font-size="9" font-style="italic" fill="#5A52B8" text-anchor="middle">build</text>
+
+<!-- query-time call: embedding_backend -> search_documents.py (Layer 4, box 6). Exits the BOTTOM of embedding_backend, not the right side - shorter path, no wasted space, no rotated text. -->
+<path d="M1240,310 V890 H700 V920" fill="none" stroke="#7F77DD" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+<text x="970" y="880" font-size="9" font-style="italic" fill="#5A52B8" text-anchor="middle">query (search_documents.py)</text>
+<!-- converge into main.py -->
+<line x1="440" y1="280" x2="700" y2="380" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<line x1="700" y1="280" x2="700" y2="380" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<line x1="960" y1="280" x2="700" y2="380" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+<!-- ===================== LAYER 2: orchestrator ===================== -->
+<text x="40" y="358" font-size="12.5" font-weight="700" fill="#3D3870">Layer 2 - runs layer 1, in order</text>
+<rect x="590" y="380" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="590" y="380" width="220" height="6" fill="#7F77DD"/>
+<circle cx="810" cy="380" r="18" fill="#7F77DD"/>
+<text x="810" y="385" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">4</text>
+<text x="602" y="426" font-size="13.5" font-weight="700" fill="#3D3870">main.py</text>
+<text x="602" y="440" font-size="11" fill="#5A52B8">Runs the three build steps above,</text>
+<text x="602" y="456" font-size="11" fill="#5A52B8">in order, and checks each one</text>
+<text x="602" y="472" font-size="11" fill="#5A52B8">actually worked before continuing.</text>
+<text x="602" y="497" font-size="10" font-style="italic" fill="#A85D12">Watch: rerun whenever source</text>
+<text x="602" y="512" font-size="10" font-style="italic" fill="#A85D12">documents or the spreadsheet change</text>
+<line x1="700" y1="550" x2="700" y2="650" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+<!-- ===================== LAYER 3: what main.py produces + the separate spreadsheet ===================== -->
+<text x="40" y="628" font-size="12.5" font-weight="700" fill="#3D3870">Layer 3 - the two raw sources everything else reads from</text>
+<rect x="590" y="650" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="590" y="650" width="220" height="6" fill="#7F77DD"/>
+<circle cx="810" cy="650" r="18" fill="#7F77DD"/>
+<text x="810" y="655" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">5</text>
+<text x="602" y="696" font-size="13.5" font-weight="700" fill="#3D3870">output/ folder</text>
+<text x="602" y="710" font-size="11" fill="#5A52B8">What main.py actually produces -</text>
+<text x="602" y="726" font-size="11" fill="#5A52B8">a saved, ready-to-search copy of</text>
+<text x="602" y="742" font-size="11" fill="#5A52B8">every document.</text>
+<text x="602" y="767" font-size="10" font-style="italic" fill="#A85D12">Watch: only search_documents.py</text>
+<text x="602" y="782" font-size="10" font-style="italic" fill="#A85D12">reads from here - nothing else does</text>
+
+<rect x="330" y="707" width="220" height="56" rx="28" fill="#5A52B8"/>
+<text x="440" y="732" font-size="11.5" fill="#FFFFFF" text-anchor="middle">Master spreadsheet</text>
+<text x="440" y="747" font-size="11.5" fill="#FFFFFF" text-anchor="middle">(data/*.xlsx - separate from main.py)</text>
+
+<line x1="700" y1="820" x2="700" y2="920" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<line x1="440" y1="763" x2="440" y2="920" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+
+<!-- ===================== LAYER 4: the two engines ===================== -->
+<text x="40" y="898" font-size="12.5" font-weight="700" fill="#3D3870">Layer 4 - the two engines</text>
+<rect x="330" y="920" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="330" y="920" width="220" height="6" fill="#7F77DD"/>
+<circle cx="550" cy="920" r="18" fill="#7F77DD"/>
+<text x="550" y="925" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">7</text>
+<text x="342" y="966" font-size="13.5" font-weight="700" fill="#3D3870">query_spreadsheet.py</text>
+<text x="342" y="980" font-size="11" fill="#5A52B8">The structured query engine.</text>
+<text x="342" y="996" font-size="11" fill="#5A52B8">Looks up ranking / counting /</text>
+<text x="342" y="1012" font-size="11" fill="#5A52B8">filtering questions directly.</text>
+<text x="342" y="1037" font-size="10" font-style="italic" fill="#A85D12">Watch: always loads the most</text>
+<text x="342" y="1052" font-size="10" font-style="italic" fill="#A85D12">recently dated spreadsheet file</text>
+
+<rect x="590" y="920" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="590" y="920" width="220" height="6" fill="#7F77DD"/>
+<circle cx="810" cy="920" r="18" fill="#7F77DD"/>
+<text x="810" y="925" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">6</text>
+<text x="602" y="966" font-size="13.5" font-weight="700" fill="#3D3870">search_documents.py</text>
+<text x="602" y="980" font-size="11" fill="#5A52B8">The document search engine.</text>
+<text x="602" y="996" font-size="11" fill="#5A52B8">Finds the most relevant chunks</text>
+<text x="602" y="1012" font-size="11" fill="#5A52B8">for a narrative question.</text>
+<text x="602" y="1037" font-size="10" font-style="italic" fill="#A85D12">Watch: needs the build steps run</text>
+<text x="602" y="1052" font-size="10" font-style="italic" fill="#A85D12">first, or there is nothing to search</text>
+
+
+
+<!-- merge bus into layer 5 -->
+<line x1="440" y1="1090" x2="440" y2="1140" stroke="#B5AFEB" stroke-width="2"/>
+<line x1="700" y1="1090" x2="700" y2="1140" stroke="#B5AFEB" stroke-width="2"/>
+<line x1="410" y1="1140" x2="1010" y2="1140" stroke="#B5AFEB" stroke-width="2"/>
+<line x1="410" y1="1140" x2="410" y2="1190" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<line x1="1010" y1="1140" x2="1010" y2="1190" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<text x="570" y="1130" font-size="10.5" font-style="italic" fill="#5A52B8" text-anchor="middle">both engines feed both paths below</text>
+
+<!-- ===================== LAYER 5: the two paths that ask a question ===================== -->
+<text x="40" y="1158" font-size="12.5" font-weight="700" fill="#3D3870">Layer 5 - the two paths that ask a question</text>
+<text x="300" y="1176" font-size="12.5" font-weight="700" fill="#3D3870">Path A - the regex router</text>
+<text x="900" y="1176" font-size="12.5" font-weight="700" fill="#3D3870">Path B - the agent</text>
+
+<rect x="300" y="1190" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="300" y="1190" width="220" height="6" fill="#7F77DD"/>
+<circle cx="520" cy="1190" r="18" fill="#7F77DD"/>
+<text x="520" y="1195" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">8</text>
+<text x="312" y="1236" font-size="13.5" font-weight="700" fill="#3D3870">ask_a_question.py</text>
+<text x="312" y="1250" font-size="11" fill="#5A52B8">Reads a question with regex rules,</text>
+<text x="312" y="1266" font-size="11" fill="#5A52B8">decides which engine(s) it needs,</text>
+<text x="312" y="1282" font-size="11" fill="#5A52B8">calls them, returns the raw answer.</text>
+<text x="312" y="1307" font-size="10" font-style="italic" fill="#A85D12">Watch: no AI reasoning here - it's</text>
+<text x="312" y="1322" font-size="10" font-style="italic" fill="#A85D12">keyword matching, not understanding</text>
+
+<rect x="560" y="1190" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="560" y="1190" width="220" height="6" fill="#7F77DD"/>
+<circle cx="780" cy="1190" r="18" fill="#7F77DD"/>
+<text x="780" y="1195" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">9</text>
+<text x="572" y="1236" font-size="13.5" font-weight="700" fill="#3D3870">test_the_system.py</text>
+<text x="572" y="1250" font-size="11" fill="#5A52B8">Runs a batch of real questions</text>
+<text x="572" y="1266" font-size="11" fill="#5A52B8">through the router automatically</text>
+<text x="572" y="1282" font-size="11" fill="#5A52B8">and reports what passed or failed.</text>
+<text x="572" y="1307" font-size="10" font-style="italic" fill="#A85D12">Watch: only checks routing - no AI</text>
+<text x="572" y="1322" font-size="10" font-style="italic" fill="#A85D12">writing is tested here</text>
+
+<rect x="820" y="1190" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="820" y="1190" width="220" height="6" fill="#D85A30"/>
+<circle cx="1040" cy="1190" r="18" fill="#D85A30"/>
+<text x="1040" y="1195" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">10</text>
+<text x="832" y="1236" font-size="13.5" font-weight="700" fill="#3D3870">agent_tools.py</text>
+<text x="832" y="1250" font-size="11" fill="#5A52B8">The bridge - turns a tool call the</text>
+<text x="832" y="1266" font-size="11" fill="#5A52B8">agent picks into a real call on the</text>
+<text x="832" y="1282" font-size="11" fill="#5A52B8">two engines above.</text>
+<text x="832" y="1307" font-size="10" font-style="italic" fill="#A85D12">Watch: this is the file that breaks</text>
+<text x="832" y="1322" font-size="10" font-style="italic" fill="#A85D12">first if the engines' functions change</text>
+
+<!-- test_the_agent.py - mirrors test_the_system.py's placement beside its path -->
+<rect x="1080" y="1190" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="1080" y="1190" width="220" height="6" fill="#D85A30"/>
+<circle cx="1300" cy="1190" r="18" fill="#D85A30"/>
+<text x="1300" y="1195" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">14</text>
+<text x="1092" y="1236" font-size="13.5" font-weight="700" fill="#3D3870">test_the_agent.py</text>
+<text x="1092" y="1250" font-size="11" fill="#5A52B8">Runs the same 30 questions</text>
+<text x="1092" y="1266" font-size="11" fill="#5A52B8">through the agent and scores</text>
+<text x="1092" y="1282" font-size="11" fill="#5A52B8">pass / weak / fail / crash.</text>
+<text x="1092" y="1307" font-size="10" font-style="italic" fill="#A85D12">Watch: free mock-mode run checks</text>
+<text x="1092" y="1322" font-size="10" font-style="italic" fill="#A85D12">tool choice only, not answer quality</text>
+
+<!-- test loop: test_the_system.py sends questions into ask_a_question.py -->
+<path d="M670,1360 V1405 H410 V1360" fill="none" stroke="#E8A33D" stroke-width="2.5" stroke-dasharray="7,5" marker-end="url(#arrowOrange)"/>
+<text x="540" y="1425" font-size="11" font-style="italic" fill="#3D3870" text-anchor="middle">sends 30 real questions through the router, automatically</text>
+
+<!-- test loop: test_the_agent.py sends the same 30 questions into agent.py -->
+<path d="M1190,1360 V1420 H930 V1460" fill="none" stroke="#E8A33D" stroke-width="2.5" stroke-dasharray="7,5" marker-end="url(#arrowOrange)"/>
+<text x="1060" y="1440" font-size="11" font-style="italic" fill="#3D3870" text-anchor="middle">tests the same 30 questions, through the agent</text>
+
+<line x1="930" y1="1360" x2="930" y2="1460" stroke="#D85A30" stroke-width="2.5" marker-end="url(#arrowRed)"/>
+
+
+<!-- ===================== LAYER 6: the agent's brain ===================== -->
+<text x="40" y="1438" font-size="12.5" font-weight="700" fill="#3D3870">Layer 6 - the agent's brain</text>
+<rect x="560" y="1460" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="560" y="1460" width="220" height="6" fill="#D85A30"/>
+<circle cx="780" cy="1460" r="18" fill="#D85A30"/>
+<text x="780" y="1465" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">11</text>
+<text x="572" y="1506" font-size="13.5" font-weight="700" fill="#3D3870">llm_client.py</text>
+<text x="572" y="1520" font-size="11" fill="#5A52B8">The actual interface to Claude -</text>
+<text x="572" y="1536" font-size="11" fill="#5A52B8">agent.py calls this TWICE per question:</text>
+<text x="572" y="1552" font-size="11" fill="#5A52B8">once to pick a tool, once to write the answer.</text>
+<text x="572" y="1577" font-size="10" font-style="italic" fill="#A85D12">Watch: silently drops to a free, no-AI</text>
+<text x="572" y="1592" font-size="10" font-style="italic" fill="#A85D12">stand-in with no API key - check startup</text>
+<line x1="780" y1="1545" x2="820" y2="1545" stroke="#D85A30" stroke-width="2.5" marker-end="url(#arrowRed)"/>
+
+<rect x="820" y="1460" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="820" y="1460" width="220" height="6" fill="#D85A30"/>
+<circle cx="1040" cy="1460" r="18" fill="#D85A30"/>
+<text x="1040" y="1465" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">12</text>
+<text x="832" y="1506" font-size="13.5" font-weight="700" fill="#3D3870">agent.py</text>
+<text x="832" y="1520" font-size="11" fill="#5A52B8">Routes the question to a tool,</text>
+<text x="832" y="1536" font-size="11" fill="#5A52B8">writes the answer, then checks its</text>
+<text x="832" y="1552" font-size="11" fill="#5A52B8">own answer against the evidence.</text>
+<text x="832" y="1577" font-size="10" font-style="italic" fill="#A85D12">Watch: two Claude calls per question,</text>
+<text x="832" y="1592" font-size="10" font-style="italic" fill="#A85D12">not one - answer, then audit</text>
+<line x1="930" y1="1630" x2="930" y2="1730" stroke="#D85A30" stroke-width="2.5" marker-end="url(#arrowRed)"/>
+
+<!-- ===================== LAYER 7: what a rep actually opens ===================== -->
+<text x="40" y="1710" font-size="12.5" font-weight="700" fill="#3D3870">Layer 7 - what a rep actually opens</text>
+<rect x="820" y="1730" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="820" y="1730" width="220" height="6" fill="#D85A30"/>
+<circle cx="1040" cy="1730" r="18" fill="#D85A30"/>
+<text x="1040" y="1735" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">13</text>
+<text x="832" y="1776" font-size="13.5" font-weight="700" fill="#3D3870">chat_ui.py</text>
+<text x="832" y="1790" font-size="11" fill="#5A52B8">A local browser console showing</text>
+<text x="832" y="1806" font-size="11" fill="#5A52B8">the answer plus pass/fail gates and</text>
+<text x="832" y="1822" font-size="11" fill="#5A52B8">a human review queue for failures.</text>
+<text x="832" y="1847" font-size="10" font-style="italic" fill="#A85D12">Watch: local only (localhost) - it</text>
+<text x="832" y="1862" font-size="10" font-style="italic" fill="#A85D12">only runs on whoever's machine starts it</text>
+
+
+<!-- ===================== STANDALONE - not part of either path ===================== -->
+<text x="40" y="1955" font-size="12.5" font-weight="700" fill="#3D3870">Standalone - not part of either path above</text>
+
+<rect x="40" y="1980" width="310" height="170" rx="6" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="1.5" stroke-dasharray="5,4"/>
+<text x="56" y="2008" font-size="13" font-weight="700" fill="#444441">propensity_model.py</text>
+<text x="56" y="2026" font-size="11" fill="#5F5E5A">Encodes the scoring formula as runnable</text>
+<text x="56" y="2042" font-size="11" fill="#5F5E5A">code. main.py runs this automatically</text>
+<text x="56" y="2058" font-size="11" fill="#5F5E5A">before building anything (Stage 0),</text>
+<text x="56" y="2074" font-size="11" fill="#5F5E5A">catching stale or wrong scores immediately.</text>
+
+<!-- real dependency: challenger_validation.py reads propensity_model.py's scores to compare against - both stay unattached/standalone, this just shows the actual relationship between them -->
+<line x1="350" y1="2065" x2="570" y2="2065" stroke="#B4B2A9" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
+<text x="460" y="2058" font-size="9" font-style="italic" fill="#8A8879" text-anchor="middle">reads scores</text>
+
+<rect x="570" y="1980" width="310" height="170" rx="6" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="1.5" stroke-dasharray="5,4"/>
+<text x="586" y="2008" font-size="13" font-weight="700" fill="#444441">challenger_validation.py</text>
+<text x="586" y="2026" font-size="11" fill="#5F5E5A">Checks propensity_model.py's scores</text>
+<text x="586" y="2042" font-size="11" fill="#5F5E5A">against real outcomes - did predicted</text>
+<text x="586" y="2058" font-size="11" fill="#5F5E5A">adopters actually adopt? Also trains its</text>
+<text x="586" y="2074" font-size="11" fill="#5F5E5A">own data-driven model on every field to</text>
+<text x="586" y="2090" font-size="11" fill="#5F5E5A">flag patterns the scorecard misses (payer</text>
+<text x="586" y="2106" font-size="11" fill="#5F5E5A">mix, specialty, volume patterns).</text>
+
+<rect x="1100" y="1980" width="310" height="170" rx="6" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="1.5" stroke-dasharray="5,4"/>
+<text x="1116" y="2008" font-size="13" font-weight="700" fill="#444441">distill_router.py</text>
+<text x="1116" y="2026" font-size="11" fill="#5F5E5A">Looks at past agent decisions (which</text>
+<text x="1116" y="2042" font-size="11" fill="#5F5E5A">tool the LLM picked, from real eval runs)</text>
+<text x="1116" y="2058" font-size="11" fill="#5F5E5A">and tries writing regex rules that</text>
+<text x="1116" y="2074" font-size="11" fill="#5F5E5A">reproduce the same choice for free - only</text>
+<text x="1116" y="2090" font-size="11" fill="#5F5E5A">promoted if 100% correct on every past</text>
+<text x="1116" y="2106" font-size="11" fill="#5F5E5A">match. Not wired in yet; a future-work demo.</text>
+
+<text x="40" y="2178" font-size="12" fill="#5A52B8">Path A and path B both sit on the same layer-4 engines - a change to those engines affects both, and only one path is currently kept in sync.</text>
+</svg>

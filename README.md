@@ -1,179 +1,115 @@
-# Rabivy Commercial AI Engine - Project Scope
+# Rabivy AI Engine
 
-## Overview
+## What this is
 
-This document outlines the architecture and phased build plan for an AI-powered commercial intelligence platform for Rabivy. The system allows AX Pharmaceuticals commercial users to ask natural-language questions (e.g. "Who are the top GLP-1 prescribers in NY?") and receive accurate, data-backed answers.
+This is a natural-language question-answering tool for a pharmaceutical sales team. A rep can ask something like *"Who should I target next month in New York, and what should I say to them?"* and get back a real, data-grounded answer - not a guess, and not something the AI made up.
 
-The platform combines several components into a single retrieval-driven system, connected by a conversational interface.
+It works two ways, both included in this repo:
 
-Disclaimer:
+- **A fast, free, deterministic router** (`ask_a_question.py`) - handles a question by matching keywords with regex, then calling one of two engines directly. No AI involved in the routing itself, so it's instant and costs nothing to run.
+- **An AI agent** (`agent.py`) - actually understands the question, decides which tool(s) to call (possibly several, chained together), and writes a real answer in its own words - while still only ever using real numbers pulled from the two engines, never inventing one.
 
-Rabivy and AX Pharmaceuticals are fictional and were created solely for the purposes of this demonstration and portfolio project. This project is an independent demonstration and was not commissioned by any pharmaceutical company.
+Both paths share the exact same two underlying engines, so neither one can drift out of sync with what the data actually says.
+
+**Disclaimer:** Rabivy and AX Pharmaceuticals are fictional, created solely for this demonstration/portfolio project. Not commissioned by any pharmaceutical company. For the original project plan this was scoped against, see [PROJECT_BRIEF.md](PROJECT_BRIEF.md).
+
 ---
 
-## Architecture Summary
+## The full pipeline, visually
 
-| Phase | Component | Status |
+![Graphic breakdown of the full AI engine pipeline](figures/rabivy_layered_schematic_V3.svg)
+
+Every file below is arranged in layers - each layer only ever talks to the layer directly above or below it. Read top to bottom.
+
+---
+
+## Layer by layer
+
+**Layer 1 - turns raw documents into searchable pieces.** Three scripts run once, in order, to prepare the knowledge base: `1_chunk_documents.py` splits every source document into small, labeled pieces (one chunk per section or HCP card); `2_tag_chunks.py` adds extra labels to the chunks so they are easily traceable; `3_create_embeddings.py` converts each piece into a vector of numbers that captures its meaning, so the system can search by meaning, not just keywords.
+
+**Layer 2 - the orchestrator.** `main.py` runs all three Layer 1 steps in the correct order, checking after each one that it actually worked before moving on. This is the one file to run to rebuild the knowledge base from scratch.
+
+**Layer 3 - the two raw sources everything else reads from.** The `output/` folder is what `main.py` actually produces - a saved, ready-to-search copy of every narrative document (Layer 1). The master spreadsheet (`data/*.xlsx`) is a separate source entirely, holding the real HCP-level prescribing and propensity data.
+ 
+In a real deployment, both of these would be built from bought and licensed data, not typed by hand:
+ 
+- **The spreadsheet's structured fields** would typically come from vendors like IQVIA (Xponent, OneKey), Symphony Health, or Komodo Health for prescribing volume and payer mix, plus Veeva CRM for rep activity and call history - each HCP record merged together by NPI (National Provider Identifier), the one ID that's consistent across every source.
+- **The narrative documents Layer 1 chunks up** would be the unstructured side: clinical trial write-ups and publications, conference proceedings and poster presentations, competitive intelligence briefs, rep talking points and objection-handling guides, and payer/drug-benefit coverage documents.
+
+In this project, all of the above is synthetic data generated to look like the real thing, not actual licensed data.
+
+**Layer 4 - the two engines.** `query_spreadsheet.py` is the structured query engine - it answers ranking, counting, and filtering questions by looking directly at the spreadsheet. `search_documents.py` is the document search engine - it finds the most relevant chunks for a narrative question, using whichever embedding model built the store (see `embedding_backend.py` below).
+
+**Layer 5 - the two paths that actually ask a question.** This is where the two approaches diverge, both sitting on the exact same Layer 4 engines underneath:
+- **Path A, the regex router:** `ask_a_question.py` reads a question with keyword/regex rules, decides which engine(s) it needs, calls them, and returns the raw answer - no real understanding, just pattern matching. `test_the_system.py` sends 30 real questions (golden test set) through it automatically and reports what passed or failed.
+- **Path B, the agent:** `agent_tools.py` is the bridge that turns a tool call the agent picks into a real call on the two engines above. `test_the_agent.py` sends the exact same 30 questions through the agent instead, and scores tool selection, retrieval, and (with a live model) answer quality.
+
+**Layer 6 - the agent's brain.** `llm_client.py` is the actual interface to Claude - `agent.py` calls it twice per question, once to pick a tool, once to write the final answer. Uses the real API if a key is set, otherwise a free, offline stand-in with no AI at all, for zero-cost testing. `agent.py` itself is the orchestrator: it runs the tool-selection loop, writes the answer, then runs a separate audit pass checking its own answer against the evidence before returning it, revising once if the audit fails.
+
+**Layer 7 - what a rep actually opens.** `chat_ui.py` is a local web interface showing the answer plus the tool trace and audit verdict alongside it, so nothing is a black box.
+
+**Standalone - real, but not part of either path above.** `propensity_model.py` encodes the scoring formula as runnable code; `main.py` runs it automatically before building anything (Stage 0), so a stale or wrong score gets caught immediately rather than silently flowing downstream. `challenger_validation.py` checks `propensity_model.py`'s scores against real (or simulated) outcomes, and separately trains its own data-driven model to flag patterns the hand-built scorecard might be missing. `distill_router.py` is an experiment: it looks at the agent's own past tool-choice decisions and tries writing free regex rules that would reproduce them, promoting a rule only if it's 100% correct on every past match - not wired into `chat_ui.py` yet.
+
+---
+
+## Every file, in one table
+
+| File | Layer | What it does |
 |---|---|---|
-| 1 | GTM Strategy | Complete |
-| 2 | Propensity Model | Complete (synthetic data) |
-| 3 | Knowledge Repository | Complete (synthetic data) |
-| 4 | Retrieval Layer (RAG) | Complete (still debugging) |
-| 5 | AI Evaluation Layer | Not started |
-| 6 | Conversational Interface | Not started |
-
-To Do:
-Ground Truth Question 20 issue: This question routes to RAG and does a single search using the whole question as the query. That search finds state_market_summary__new_york — a document that's purely targeting data (prescriber lists, volumes, propensity). It contains nothing about messaging, competitive positioning, or talking points at all. So the AI genuinely only has half the ingredients — it can't "tap into key facts that make Rabivy better" because those facts were never retrieved in the first place. It's not an AI reasoning failure; it's a retrieval gap, same category as "didn't compare" was.
-
-
-**Figure 1: Project Pipeline**
-
-![Full pipeline, left to right, with agent add-on opportunities](figures/Rabivy_AI_engine_pipeline.jpg)
-
----
-
-## Phase 1: GTM Strategy
-
-Defines the commercial logic the platform is built to support.
-
-- Target HCP segments (Untreated High-Need, Re-Engagement/Lapsed, Competitive Switchers, Weight Maintenance)
-- Clinician targeting criteria
-- Competitive positioning relative to the GLP-1 class
-- Success metrics
-
-This content is later ingested into the knowledge repository (Phase 3) as a source document set.
+| `1_chunk_documents.py` | 1 | Splits source documents into small, labeled, searchable pieces |
+| `2_tag_chunks.py` | 1 | Adds competitor/brand tags to each piece |
+| `3_create_embeddings.py` | 1 | Converts each piece into a vector for meaning-based search |
+| `main.py` | 2 | Runs the whole build pipeline, in order, with checks |
+| `output/` folder | 3 | What `main.py` produces - the saved, searchable documents |
+| `data/*.xlsx` (master spreadsheet) | 3 | The real HCP prescribing/propensity data |
+| `query_spreadsheet.py` | 4 | Structured engine - ranking, counting, filtering |
+| `search_documents.py` | 4 | Document engine - meaning-based search over chunks |
+| `ask_a_question.py` | 5 (Path A) | Regex router - no AI, keyword matching only |
+| `test_the_system.py` | 5 (Path A) | Runs 30 questions through the router, scores results |
+| `agent_tools.py` | 5 (Path B) | Bridges the agent's tool calls to the two real engines |
+| `test_the_agent.py` | 5 (Path B) | Runs the same 30 questions through the agent, scores results |
+| `llm_client.py` | 6 | The real interface to Claude (or a free offline stand-in) |
+| `agent.py` | 6 | Orchestrator - tool loop, answer synthesis, self-audit |
+| `chat_ui.py` | 7 | Local web interface showing the answer plus its evidence |
+| `embedding_backend.py` | standalone | Shared fallback so build and query never use mismatched embedding models |
+| `propensity_model.py` | standalone | The scoring formula as code; guards `main.py` against stale scores |
+| `challenger_validation.py` | standalone | Checks the scorecard against real outcomes and a learned model |
+| `distill_router.py` | standalone | Experiment: turns the agent's own past decisions into free regex rules |
 
 ---
 
-## Phase 2: Propensity Model
+## Running it
 
-A predictive scoring model that ranks HCPs by likelihood to prescribe Rabivy. Built as a literature-weighted scorecard across nine variables (Rx volume, payer mix, formulary tier, prior authorization burden, existing AX Pharmaceuticals relationship, etc.), conditioned on specialty.
+```bash
+pip install -r requirements.txt
 
-- **Current state:** built using synthetic dataset
-- **Required for production:** rebuild on licensed prescriber data, with scoring logic unchanged
-- **Function in the platform:** a queryable data source, not a document - the model output is retrieved by the system, not generated by the language model
+python main.py                 # build the knowledge base (chunk, tag, embed)
 
----
+python test_the_system.py      # test Path A - the regex router (free, no API key)
+python test_the_agent.py       # test Path B - the agent (free in mock mode, no API key needed)
 
-## Phase 3: Knowledge Repository
+export ANTHROPIC_API_KEY=...   # Windows: set ANTHROPIC_API_KEY=...
+python agent.py "Who should I target next month in New York, and what should I say to them?"
+python agent.py                # interactive session, with conversation memory
+python chat_ui.py               # web interface at http://localhost:8017
+```
 
-The data foundation. Establishes what information exists and where it lives, prior to any retrieval system being built.
+`test_the_agent.py` runs in one of two modes automatically, depending on whether a key is set:
+- **Mock mode** (no key) - free, deterministic, checks tool selection and retrieval only.
+- **Real mode** (key set) - additionally checks answer quality and the audit verdict, using the real model.
 
-**Structured data:**
-- Prescriber-level Rx/NRx data (IQVIA Xponent, Symphony Health, Komodo)
-- HCP reference data — NPI, specialty, location, decile
-- Payer and formulary coverage data
-- Propensity scores (Phase 2)
-- Rep activity and call history (Veeva CRM)
-
-**Unstructured data:**
-- GTM strategy documents (Phase 1)
-- Brand plans and positioning materials
-- Competitive intelligence
-- Clinical publications
-- Market access documentation
-
-**Required first step:** a source inventory - an audit of every available source, its owner, format, and update frequency.
+CI (`.github/workflows/eval.yml`) runs the full build plus both test files, in mock mode, on every push and pull request - so a change that breaks routing, retrieval, or the agent loop turns the commit red before it reaches anyone. It also runs `challenger_validation.py`'s model-gap digest.
 
 ---
 
-## Phase 4: Retrieval Layer (RAG)
+## Current status / known limitations
 
-The component connecting the knowledge repository to the language model. Retrieval-augmented generation ensures the system answers from verified company data rather than the model's training data.
-
-This phase has two distinct retrieval paths, plus routing and synthesis logic connecting them.
-
-### 4.1 Structured Query Engine
-Handles ranking and lookup questions over tabular data (e.g. "top prescriber in NY"). Converts the question into a database query - filter, sort, return - guaranteeing a factually correct result rather than an inferred one.
-
-### 4.2 Document Search Engine
-Handles conceptual or narrative questions where the answer is contained in written material rather than a single data point. Pipeline:
-
-1. Text extraction from source documents (PDF, PPTX, etc.)
-2. Chunking - splitting documents into retrievable segments
-3. Embedding - converting each chunk into a vector representation
-4. Storage in a vector database for semantic search
-
-**Chunking strategy:** documents must be segmented along topic boundaries (e.g. patient selection, competitive landscape, access barriers as separate chunks), not by fixed length. Chunking quality has a greater impact on retrieval accuracy than the choice of underlying language model.
-
-**Metadata tagging:** each chunk is tagged with attributes (brand, geography, audience, source type, date) to allow filtering prior to semantic search.
-
-### 4.3 Query Router
-Classifies each incoming question and directs it to the structured query engine, the document search engine, or both. Routing accuracy is a primary determinant of overall system reliability.
-
-### 4.4 Answer Synthesis
-The language model's role is restricted to formatting retrieved information into a natural-language response. The model does not generate facts, scores, or rankings - these are supplied by Phases 2 and 4.1–4.2.
-
-### 4.5 Multi-source queries
-Some questions require combining outputs from multiple sources in a single response (e.g. "who should I target next month?" draws on current Rx data, propensity scores, and GTM guidance simultaneously).
-
-### 4.6 Retrieval Evaluation
-Retrieval accuracy is tested against a set of questions with known correct answers and sources, measuring precision, recall, relevance, and hallucination rate.
+- **Retrieval confidence on some narrative questions is modest** - a known limitation of the fast, free embedding model on short or informally-phrased questions, not a bug. A better embedding model would fix it; parked for now since this is a demonstration system.
+- **`distill_router.py` is a real experiment, not live** - it isn't wired into `chat_ui.py`, so it doesn't affect what a rep actually sees today.
+- Both Path A and Path B sit on the same Layer 4 engines - a change to those engines affects both, so both are kept in sync deliberately, not by accident.
 
 ---
 
-### Implementation Reference: Build Scripts vs. Tool Scripts
+## Attribution
 
-**Figure 2: How the various files work together**
-
-![How a question gets answered](figures/RAG_pipeline_flowchart.svg)
- 
-The current codebase implementing Phase 4 is organized into two categories of scripts, each with a different execution model. This section maps the phases above to the actual files.
- 
-#### Build scripts (run once, in order, produce output)
- 
-These scripts process the knowledge base and save their results to disk. Each one depends on the previous step's output, so they must run in this exact sequence:
- 
-1. **`1_chunk_documents.py`** - splits source documents into labeled, retrievable segments (Phase 4.2, chunking)
-2. **`2_tag_chunks.py`** - adds metadata tags such as competitor and brand mentions to each segment (Phase 4.2, metadata tagging)
-3. **`3_create_embeddings.py`** - converts each tagged segment into a vector representation for semantic search (Phase 4.2, embedding)
-**`main.py`** runs all three automatically, in the correct order, checking after each step that it actually produced valid output before continuing. This is the one file that should be run to rebuild the knowledge base after the source documents or master spreadsheet change.
- 
-#### Tool scripts (run on demand, answer one question at a time)
- 
-These scripts do not produce new output on disk. Each one answers a specific question when called:
- 
-- **`query_spreadsheet.py`** - the structured query engine (Phase 4.1). Looks up ranking, counting, and filtering questions directly against the master spreadsheet.
-- **`search_documents.py`** - the document search engine (Phase 4.2). Retrieves the most relevant document segments for a given narrative question.
-- **`ask_a_question.py`** - the query router (Phase 4.3). Determines whether a question needs the structured engine, the document engine, or both, and returns the answer.
-- **`test_the_system.py`** (Phase 4.6) is a partial exception: rather than requiring a specific question, it runs a fixed bank of real test questions through the router automatically and reports whether each one succeeded. It is currently run as a separate, explicit step after `main.py`, to confirm the rebuilt knowledge base is working correctly end to end.
-
----
-
-## Phase 5: AI Evaluation Layer
-
-A governance layer that validates system outputs on an ongoing basis, not only at launch.
-
-- Maintains a bank of test questions with known correct answers
-- Runs automatically whenever the underlying data or models change
-- Tracks accuracy and hallucination rate over time
-
-This phase is conceptually aligned with the existing AIML evaluation workstream.
-
----
-
-## Phase 6: Conversational Interface
-
-The user-facing layer. Functions as follows:
-
-1. Receives the user's question
-2. Passes it to the query router (Phase 4.3)
-3. Retrieves the relevant fact(s) from the structured or document engine
-4. Validates output against the evaluation layer (Phase 5)
-5. Returns a natural-language response
-
-**Example output:**
-> "Dr. B is currently the third-highest GLP-1 prescriber in your territory but has the highest Rabivy adoption propensity score (87/100). Recommended messaging focus: long-term weight maintenance and unmet patient need."
-
----
-
-## Implementation Sequence
-
-1. **Source inventory** - catalogue all available data sources, documents, models, and dashboards, with owner, format, and update frequency
-2. **Question taxonomy** - define the categories of questions the system must answer (lookup, predictive, strategic, narrative); this determines routing design
-3. **Knowledge structuring** - define chunking and metadata approach prior to ingestion
-4. **Pipeline build** - implement document processing (extraction, chunking, embedding, storage) and structured query engine in parallel
-5. **Evaluation harness** - build ground-truth test sets and accuracy tracking
-6. **Conversational interface** - final layer, built once retrieval and evaluation are validated
-
----
+Phases 1-4 (knowledge repository, propensity model, structured and semantic retrieval engines, the regex router and its evaluation) and Phases 5-6 (the agentic layer, evaluation harness, and conversational interface) were both built as part of this project, by collaborators working on their own layers of the same system - see commit history for the detailed timeline. The regex router (Path A) and the agent (Path B) were deliberately kept as two separate, comparable paths over the same underlying engines, rather than one replacing the other.
