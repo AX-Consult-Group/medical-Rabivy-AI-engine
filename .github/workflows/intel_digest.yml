@@ -1,0 +1,52 @@
+# Scheduled competitive-intelligence digest.
+#
+# Every Monday 06:00 UTC (and on demand via the Actions "Run workflow"
+# button), this pulls the incoming intel batch, triages it against the
+# brand strategy lens, and publishes the ranked digest:
+#   - rendered directly on the workflow run's summary page
+#   - attached as a build artifact (markdown + email-ready HTML)
+#
+# This demo simulates the batch. In production the "Simulate" step is
+# replaced by real feed connectors (PubMed / ClinicalTrials.gov / FDA
+# RSS / conference scrapers) writing into data/ci_feed/incoming/, and
+# the optional email step is enabled by setting SMTP_* and DIGEST_TO
+# repository secrets. Triage runs offline (keyword lens) in CI; set an
+# ANTHROPIC_API_KEY secret for analyst-grade LLM triage.
+
+name: intel-digest
+
+on:
+  schedule:
+    - cron: "0 6 * * 1"   # Mondays 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Simulate incoming batch (replace with real feed connectors)
+        run: python intel_digest.py --simulate
+
+      - name: Triage and build digest
+        env:
+          AGENT_LLM: mock   # remove and add ANTHROPIC_API_KEY secret for LLM triage
+        run: python intel_digest.py --no-ingest
+
+      - name: Publish digest on the run page
+        run: cat output/intel_digest_*.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attach digest artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: intel-digest
+          path: |
+            output/intel_digest_*.md
+            output/intel_digest_*.html
+          if-no-files-found: error
