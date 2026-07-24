@@ -48,28 +48,37 @@ class MiniLMBackend:
 
 
 class TfidfLsaBackend:
-    """Offline stand-in: TF-IDF over word 1-2 grams, reduced with
-    truncated SVD (classic LSA), L2-normalised. Weaker than a neural
-    embedding on paraphrase, but strong on this corpus's vocabulary-
-    rich questions - and it needs no network at all."""
+    """Offline stand-in: TF-IDF over word 1-2 grams, compressed to a
+    dense vector by SPARSE RANDOM PROJECTION, L2-normalised.
+
+    Random projection (not truncated SVD/LSA) is a deliberate choice:
+    it approximately PRESERVES TF-IDF cosine similarity for every
+    document - including ones whose distinctive terms are rare. SVD
+    optimises for corpus-wide variance, so with 15,000 near-identical
+    HCP cards dominating the corpus it crushed small novel documents
+    (freshly ingested intel items) into generic directions and made
+    them unretrievable; all pairwise similarities collapsed above 0.9.
+    Johnson-Lindenstrauss projection has no such bias. min_df=1 for the
+    same reason: a new item is often the only document containing its
+    key terms, and those terms must stay in the vocabulary."""
 
     name = FALLBACK_NAME
 
     def __init__(self, fitted=None):
-        self._pipeline = fitted  # (vectorizer, svd) once fitted
+        self._pipeline = fitted  # (vectorizer, projector) once fitted
 
     def fit_encode(self, texts):
         from sklearn.feature_extraction.text import TfidfVectorizer
-        from sklearn.decomposition import TruncatedSVD
+        from sklearn.random_projection import SparseRandomProjection
         import joblib
 
         vectorizer = TfidfVectorizer(ngram_range=(1, 2), sublinear_tf=True,
-                                     min_df=2, strip_accents="unicode")
-        tfidf = vectorizer.fit_transform(texts)
-        dim = min(_FALLBACK_DIM, tfidf.shape[1] - 1, tfidf.shape[0] - 1)
-        svd = TruncatedSVD(n_components=dim, random_state=0)
-        vecs = svd.fit_transform(tfidf)
-        self._pipeline = (vectorizer, svd)
+                                     min_df=1, strip_accents="unicode")
+        tfidf = _sk_normalize(vectorizer.fit_transform(texts))
+        projector = SparseRandomProjection(n_components=_FALLBACK_DIM,
+                                           dense_output=True, random_state=0)
+        vecs = projector.fit_transform(tfidf)
+        self._pipeline = (vectorizer, projector)
         os.makedirs("output", exist_ok=True)
         joblib.dump(self._pipeline, _FALLBACK_PATH)
         return self._l2(vecs)
@@ -78,14 +87,19 @@ class TfidfLsaBackend:
         if self._pipeline is None:
             import joblib
             self._pipeline = joblib.load(_FALLBACK_PATH)
-        vectorizer, svd = self._pipeline
-        return self._l2(svd.transform(vectorizer.transform(texts)))
+        vectorizer, projector = self._pipeline
+        return self._l2(projector.transform(_sk_normalize(vectorizer.transform(texts))))
 
     @staticmethod
     def _l2(vecs):
         norms = np.linalg.norm(vecs, axis=1, keepdims=True)
         norms[norms == 0] = 1.0
         return vecs / norms
+
+
+def _sk_normalize(sparse_matrix):
+    from sklearn.preprocessing import normalize
+    return normalize(sparse_matrix)
 
 
 def get_build_backend():
