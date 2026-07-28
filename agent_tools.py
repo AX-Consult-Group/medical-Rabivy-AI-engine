@@ -251,7 +251,12 @@ def _count_active_writers(inp):
 
 def _states_summary(inp):
     data = query_spreadsheet.states_by_high_tier(int(inp.get("n", 5)))
-    return {"source": "hcp_propensity_table", "high_tier_hcps_by_state": data["results"]}
+    # Include the tier the underlying function actually used (currently
+    # always "High") - was silently dropped before, which meant nothing
+    # downstream (evals, audits, callers) could verify which tier this
+    # summary was actually computed against.
+    return {"source": "hcp_propensity_table", "tier": data.get("tier", "High"),
+            "high_tier_hcps_by_state": data["results"]}
 
 
 def _search_documents(inp):
