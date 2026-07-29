@@ -31,27 +31,6 @@
 # real referent-resolution logic, so the two unresolved-referent
 # questions WILL get a spurious Layer 1 FAIL in mock mode - flagged
 # inline on those questions. Trust Layer 1 on those two only in real mode.
-
-# =====================================================================
-# KNOWN LIMITATION (found 2026-07-28): retrieval miss on the
-# discontinuation question, confirmed on the agent path specifically.
-#
-# One-off real-mode check (diagnose_discontinuation.py) showed the
-# agent wrote a strong, well-formed search query ("patient
-# discontinuation persistence adherence stopping GLP-1 therapy after
-# one year", top_k=6) - and still didn't retrieve the intended source
-# chunk (why_patients_discontinue). Top result was a different chunk
-# (0.722, "Lapsed / Re-Engagement Patients").
-#
-# This rules out "the agent's query wasn't good enough" as the cause -
-# even a strong query misses it, so it's a genuine embedding-model
-# limitation, not an agent reasoning problem.
-#
-# The written answer stayed accurate anyway in this instance, since
-# the missing content also happens to live in the chunks that WERE
-# retrieved. ground_truth.py's tag list for this question was also
-# found to be too loose (see its own comment) and has been tightened;
-# Layer 2 now correctly reflects the miss.
 # =====================================================================
 
 import json
@@ -211,16 +190,25 @@ QUESTIONS = [
     {
         "group": "RAG - HCP cards & comparisons", "cat": "comparison",
         "q": "Compare NPI 1344001929 to a typical endocrinologist.",
-        "expect_tools": ["lookup_hcp", "search_documents"],
+        "expect_tools_any_of": [["lookup_hcp", "search_documents"], ["lookup_hcp", "aggregate_hcp_stats"]],
         "rules_check": lambda evidence: gt.any_present(json.dumps(evidence, default=str).lower(), ["1344001929"])
-                        and gt.any_present(json.dumps(evidence, default=str).lower(),
-                                          gt.NARRATIVE_FACTS["typical_endocrinologist"]["tag"]),
-        "note": "TWO sources must both be present. Layer 3 checks a fact "
-                "unique to EACH side (the NPI's real script count, and the "
-                "live specialty-wide mean propensity). MOCK MODE CAVEAT: "
-                "MockLLM's generic search query often retrieves an adjacent "
-                "but wrong benchmark section - a Layer 3 FAIL here in mock "
-                "mode is expected, not a regression. Trust this in real mode.",
+                        and (gt.any_present(json.dumps(evidence, default=str).lower(),
+                                            gt.NARRATIVE_FACTS["typical_endocrinologist"]["tag"])
+                             or any(e["tool"] == "aggregate_hcp_stats"
+                                    and str(e.get("input", {}).get("specialty", "")).lower() == "endocrinology"
+                                    for e in evidence)),
+        "note": "TWO sources must both be present, EITHER the narrative "
+                "benchmark doc OR the new aggregate_hcp_stats tool (added "
+                "2026-07-28) - a real run (2026-07-29) found the agent now "
+                "prefers the more precise aggregate tool over the narrative "
+                "doc for this comparison, which is a genuine improvement, "
+                "not a regression - the eval was updated to accept it rather "
+                "than penalise a better answer. Layer 3 checks a fact unique "
+                "to EACH side (the NPI's real script count, and the live "
+                "specialty-wide mean propensity) regardless of which path was "
+                "used. MOCK MODE CAVEAT: MockLLM's generic search query often "
+                "retrieves an adjacent but wrong benchmark section - a Layer "
+                "3 FAIL here in mock mode is expected, not a regression.",
         "ground_truth": lambda: [gt.gt_scripts_for_npi("1344001929")] + gt.gt_specialty_benchmark_facts("Endocrinology"),
     },
 

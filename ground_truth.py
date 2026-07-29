@@ -274,18 +274,35 @@ def gt_specialty_benchmark_facts(specialty):
 
 
 # ---------------------------------------------------------------------
-# CLARIFICATION / REJECTION PHRASE LISTS
+# CLARIFICATION / REJECTION CHECKS
 # Used as Layer 3 (the ANSWER) for questions whose only correct output
 # is "ask for clarification" or "say clearly this isn't valid" - these
 # are NOT skipped, because the correct answer is fully determinable and
 # never changes: a specific-doctor question with no NPI given must
-# always ask for the NPI, regardless of what the data says. Several
-# phrasings are listed as alternatives (an OR-group) since an LLM may
-# word this differently each time - the router's wording is fixed, but
-# checking the same broad list costs nothing and stays consistent.
+# always ask for the NPI, regardless of what the data says.
+#
+# DESIGN NOTE (2026-07-29): this used to be a single flat list of exact
+# phrases pulled from real observed answers ("10-digit npi", "please
+# provide", etc.) - but a real run found a perfectly correct answer
+# ("The doctor's NPI (10-digit number)") FAIL, purely because the words
+# were in a different order than any phrase on the list. Patching that
+# one phrasing in would just repeat the same mistake on the next new
+# wording. Restructured instead as two independent, genuinely different
+# conditions, BOTH of which must be true - this checks the underlying
+# CONCEPT (mentions the identifier, and is asking for/lacking it) rather
+# than memorising exact sentences:
+#   1. The answer mentions the identifier at all (npi/hcp/doctor)
+#   2. The answer is asking for or lacking something (provide, specify,
+#      share, which, clarify, don't know, need, missing)
+# Safe to check for a bare word like "npi" here specifically (unlike
+# elsewhere in this file) because these are no-tool-call questions - the
+# haystack is just the written answer, never raw JSON containing an
+# "npi" field key that could cause an accidental match.
 # ---------------------------------------------------------------------
-CLARIFICATION_FACTS = [["10-digit npi", "which npi", "provide the npi", "specify the npi",
-                        "no npi is given", "don't know which", "which doctor", "which hcp", "clarif"]]
+CLARIFICATION_MENTIONS_SUBJECT = ["npi", "hcp", "doctor", "prescriber"]
+CLARIFICATION_IS_REQUESTING = ["provide", "specify", "share", "which one", "which specific",
+                               "clarif", "don't know", "do not know", "need", "missing", "give me"]
+CLARIFICATION_FACTS = [CLARIFICATION_MENTIONS_SUBJECT, CLARIFICATION_IS_REQUESTING]
 
 FAKE_NPI_REJECTION_FACTS = [["not found", "no hcp", "no record", "doesn't exist", "no hcp card found"]]
 
