@@ -31,6 +31,27 @@
 # real referent-resolution logic, so the two unresolved-referent
 # questions WILL get a spurious Layer 1 FAIL in mock mode - flagged
 # inline on those questions. Trust Layer 1 on those two only in real mode.
+
+# =====================================================================
+# KNOWN LIMITATION (found 2026-07-28): retrieval miss on the
+# discontinuation question, confirmed on the agent path specifically.
+#
+# One-off real-mode check (diagnose_discontinuation.py) showed the
+# agent wrote a strong, well-formed search query ("patient
+# discontinuation persistence adherence stopping GLP-1 therapy after
+# one year", top_k=6) - and still didn't retrieve the intended source
+# chunk (why_patients_discontinue). Top result was a different chunk
+# (0.722, "Lapsed / Re-Engagement Patients").
+#
+# This rules out "the agent's query wasn't good enough" as the cause -
+# even a strong query misses it, so it's a genuine embedding-model
+# limitation, not an agent reasoning problem.
+#
+# The written answer stayed accurate anyway in this instance, since
+# the missing content also happens to live in the chunks that WERE
+# retrieved. ground_truth.py's tag list for this question was also
+# found to be too loose (see its own comment) and has been tightened;
+# Layer 2 now correctly reflects the miss.
 # =====================================================================
 
 import json

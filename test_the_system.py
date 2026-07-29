@@ -35,6 +35,26 @@
 # guess" questions, so they belong together rather than the referent
 # ones sitting inside "HCP cards & comparisons" as if they were normal
 # lookups.
+
+# =====================================================================
+# KNOWN LIMITATION (found 2026-07-28): retrieval miss on the
+# discontinuation question.
+#
+# Real run showed Q23 ("Why do patients stop taking GLP-1s after a
+# year?") returning the wrong top chunk (0.705 similarity,
+# "Monthly dosing doesn't matter that much") - the actual intended
+# source chunk (why_patients_discontinue) wasn't in the top 5 at all.
+#
+# Found via test_retrieval_ranking.py, which checks whether the
+# correct chunk is ranked first, not just present anywhere - this
+# question came back "NOT IN TOP 5 AT ALL". That in turn revealed
+# ground_truth.py's tag list for this question had been too loose
+# (matched on plain English words that happened to appear in the
+# wrong chunk's body text), which had been masking this exact miss as
+# a false PASS. Tag list now tightened; Layer 2 correctly shows FAIL.
+#
+# Not fixed further - deliberately deferred, known embedding-model
+# limitation, not a routing or logic bug.
 # =====================================================================
 
 import json

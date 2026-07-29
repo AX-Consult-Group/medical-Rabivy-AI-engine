@@ -143,6 +143,78 @@ def gt_filter_count(**filter_kwargs):
     return str(data["count"])
 
 
+def _apply_filters(df, filters):
+    """Applies equality filters, case-insensitively for string values -
+    the dataframe stores some columns lowercase (state) and others
+    properly-cased (specialty, tier) - callers shouldn't need to know
+    which is which."""
+    sub = df
+    for col, val in filters.items():
+        if isinstance(val, str):
+            sub = sub[sub[col].str.lower() == val.lower()]
+        else:
+            sub = sub[sub[col] == val]
+    return sub
+
+
+def gt_pct_matching(subset_filters, condition_column, condition_value):
+    """Percentage of rows matching subset_filters that ALSO satisfy
+    condition_column == condition_value. Returns a dict with the EXACT
+    underlying counts as well as the derived percentage - the counts
+    are whole numbers with zero legitimate rounding ambiguity, so they
+    should be checked exactly, never with a tolerance. Only the
+    derived percentage itself should get any rounding leniency."""
+    sub = _apply_filters(qs.df, subset_filters)
+    total = len(sub)
+    if total == 0:
+        return None
+    if isinstance(condition_value, str):
+        match = sub[condition_column].str.lower() == condition_value.lower()
+    else:
+        match = sub[condition_column] == condition_value
+    matching = int(match.sum())
+    return {"total_count": total, "matching_count": matching,
+            "percentage": 100 * matching / total}  # full precision - caller decides rounding
+
+
+def gt_mean_column(column, **filters):
+    """Mean of a numeric column among rows matching the given filters.
+    Returns a dict with the EXACT row count alongside the mean - the
+    count should be checked exactly (no legitimate ambiguity), the
+    mean itself can have a small rounding tolerance."""
+    sub = _apply_filters(qs.df, filters)
+    count = len(sub)
+    if count == 0:
+        return None
+    # 3 decimals, not 1 - a 0-1 scale metric (propensity_score) needs more
+    # precision than 1dp gives. Found 2026-07-28: 1dp rounding turned a
+    # correct raw mean of 0.3548 into 0.4, making the agent's exactly-right
+    # answer of 0.355 look like a false FAIL against too-tight a tolerance.
+    # UPDATED: no rounding at all now - full precision, caller decides.
+    return {"count": count, "mean": float(sub[column].mean())}
+
+def gt_sum_column(column, **filters):
+    """Total (sum) of a numeric column among rows matching the given
+    filters - a genuinely different operation from an average (no
+    division involved), so a wrong answer here means a different kind
+    of mistake than a wrong mean would."""
+    sub = _apply_filters(qs.df, filters)
+    count = len(sub)
+    if count == 0:
+        return None
+    return {"count": count, "sum": float(sub[column].sum())}
+
+
+def gt_group_diff(filters_a, filters_b):
+    """Counts for TWO separate groups plus their difference - tests
+    whether the agent correctly retrieves two independent facts before
+    combining them, a different failure mode from a single-group stat
+    (either count alone could be wrong, or the subtraction itself)."""
+    count_a = len(_apply_filters(qs.df, filters_a))
+    count_b = len(_apply_filters(qs.df, filters_b))
+    return {"count_a": count_a, "count_b": count_b, "difference": count_a - count_b}
+
+
 def gt_hcp_card_facts(npi):
     """For a specific-NPI lookup/summary question: a specific NPI lookup
     is ALWAYS fully determinable, no matter what the data says - so
@@ -236,7 +308,14 @@ NARRATIVE_FACTS = {
         "source": "docs/rep_field/rep_talking_points_by_segment.md",
     },
     "zepbound_differentiator": {
-        "tag": ["differentiator"],
+        # Tightened 2026-07-28 (same fix as discontinuation, applied
+        # preemptively): "differentiator" alone is a plain English word
+        # that could accidentally match an unrelated chunk's prose. The
+        # real chunk_id is
+        # rabivy_product_benefits_brief__the_headline_differentiator_monthly_dosing
+        # - "headline_differentiator" only ever appears as part of that
+        # real chunk_id, never as ordinary body text.
+        "tag": ["headline_differentiator"],
         "facts": ["monthly", "dosing"],
         "source": "docs/rep_field/rabivy_product_benefits_brief.md",
     },
@@ -280,7 +359,17 @@ NARRATIVE_FACTS = {
         "source": "docs/clinical/real_world_evidence_brief.md",
     },
     "discontinuation": {
-        "tag": ["why_patients_discontinue", "persistence", "discontinue"],
+        # FIXED 2026-07-28: was ["why_patients_discontinue", "persistence",
+        # "discontinue"] - the last two are common English words that
+        # showed up in an UNRELATED chunk's body prose ("Reframe around
+        # persistence data... patients discontinue within the first
+        # year"), causing Layer 2 to falsely PASS even when the WRONG
+        # chunk was retrieved (found via test_retrieval_ranking.py,
+        # which checks chunk_id specifically rather than searching all
+        # retrieved text). Same false-positive mechanism as the Q25
+        # "npi"-as-JSON-key bug fixed earlier. Now only the real,
+        # verified, precise chunk_id counts.
+        "tag": ["why_patients_discontinue"],
         "facts": ["side effects", "cost"],
         "source": "docs/clinical/real_world_evidence_brief.md",
     },
