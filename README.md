@@ -13,6 +13,10 @@ Both paths share the exact same two underlying engines, so neither one can drift
 
 **Disclaimer:** Rabivy and AX Pharmaceuticals are fictional, created solely for this demonstration/portfolio project. Not commissioned by any pharmaceutical company. For the original project plan this was scoped against, see [PROJECT_BRIEF.md](PROJECT_BRIEF.md).
 
+For a full write-up of the project - the architecture, the design decisions, and why it's built the way it is - see the [Project Write-Up](https://ax-consult-group.github.io/medical-Rabivy-AI-engine/index.html).
+
+For a full walkthrough of how this whole system is tested - the golden question set, live ground truth, and every evaluation described below, including the real bugs each one found - see the [Evaluation Suite](https://ax-consult-group.github.io/medical-Rabivy-AI-engine/evals.html) write-up.
+
 ---
 
 ## The full pipeline, visually
@@ -20,6 +24,8 @@ Both paths share the exact same two underlying engines, so neither one can drift
 ![Graphic breakdown of the full AI engine pipeline](figures/rabivy_layered_schematic_V4.svg)
 
 Every file below is arranged in layers - each layer only ever talks to the layer directly above or below it. Read top to bottom.
+
+*(Note: the schematic above reflects the architecture as of the last diagram update - the evaluation layer described below has since grown to 5 files and a shared ground-truth module; the diagram itself hasn't been redrawn to match yet.)*
 
 ---
 
@@ -41,8 +47,16 @@ In this project, all of the above is synthetic data generated to look like the r
 **Layer 4 - the two engines.** `query_spreadsheet.py` is the structured query engine - it answers ranking, counting, and filtering questions by looking directly at the spreadsheet. `search_documents.py` is the document search engine - it finds the most relevant chunks for a narrative question, using whichever embedding model built the store (see `embedding_backend.py` below).
 
 **Layer 5 - the two paths that actually ask a question.** This is where the two approaches diverge, both sitting on the exact same Layer 4 engines underneath:
-- **Path A, the regex router:** `ask_a_question.py` reads a question with keyword/regex rules, decides which engine(s) it needs, calls them, and returns the raw answer - no real understanding, just pattern matching. `test_the_system.py` sends 30 real questions (golden test set) through it automatically and reports what passed or failed.
-- **Path B, the agent:** `agent_tools.py` is the bridge that turns a tool call the agent picks into a real call on the two engines above. `test_the_agent.py` sends the exact same 30 questions through the agent instead, and scores tool selection, retrieval, and (with a live model) answer quality.
+- **Path A, the regex router:** `ask_a_question.py` reads a question with keyword/regex rules, decides which engine(s) it needs, calls them, and returns the raw answer - no real understanding, just pattern matching.
+- **Path B, the agent:** `agent_tools.py` is the bridge that turns a tool call the agent picks into a real call on the two engines above. Includes `aggregate_hcp_stats`, a dedicated tool that computes a true average, percentage, sum, or difference directly over every matching row - added after testing found the agent either guessing from a capped 25-row sample, or correctly refusing to answer, whenever a question asked for a statistic across a larger group than that.
+
+**Layer 5 (evaluation) - does either path actually work?** Rebuilt this cycle around a single 30-question golden set, checked on **three separate layers** per question rather than one pass/fail: did it route to the right engine, did it apply the right rules/filters to get there, and does the answer match reality - computed **live** against the actual spreadsheet each run, so a data refresh moves the expected answer automatically instead of a test going stale.
+- `ground_truth.py` - shared module every eval file imports: computes live answers directly from the real data functions, and holds a small, source-verified table of facts for narrative questions. One source of truth, so the eval files can't drift apart from each other.
+- `test_the_system.py` - runs the 30 questions through Path A, all three layers.
+- `test_the_agent.py` - runs the same 30 questions through Path B, all three layers; tool selection and arguments checked always, answer quality and audit verdict checked only with a live model.
+- `test_phrasing_consistency.py` - takes 10 of the 30 questions and re-runs each one with 2 genuinely different rephrasings, reusing the exact same three-layer checks - checks whether the system still gets it right when a rep doesn't ask in the exact golden-set wording.
+- `test_retrieval_ranking.py` - calls the document search engine directly (no LLM, so it's free to run) and checks whether the correct chunk for each narrative question is ranked **first**, not just present somewhere in the results - a stricter check than anything above, since the model weighs whatever's ranked first most heavily.
+- `test_numeric_accuracy.py` - checks the agent's own computed math (a percentage, an average, a sum, a difference between two groups, a compound calculation) against a live, full-precision ground truth, with no rounding tolerance - a different question from whether the underlying data is right, since this is about whether the agent's own arithmetic on top of that data is right too.
 
 **Layer 6 - the agent's brain.** `llm_client.py` is the actual interface to Claude - `agent.py` calls it twice per question, once to pick a tool, once to write the final answer. Uses the real API if a key is set, otherwise a free, offline stand-in with no AI at all, for zero-cost testing. `agent.py` itself is the orchestrator: it runs the tool-selection loop, writes the answer, then runs a separate audit pass checking its own answer against the evidence before returning it, revising once if the audit fails.
 
@@ -65,9 +79,13 @@ In this project, all of the above is synthetic data generated to look like the r
 | `query_spreadsheet.py` | 4 | Structured engine - ranking, counting, filtering |
 | `search_documents.py` | 4 | Document engine - meaning-based search over chunks |
 | `ask_a_question.py` | 5 (Path A) | Regex router - no AI, keyword matching only |
-| `test_the_system.py` | 5 (Path A) | Runs 30 questions through the router, scores results |
-| `agent_tools.py` | 5 (Path B) | Bridges the agent's tool calls to the two real engines |
-| `test_the_agent.py` | 5 (Path B) | Runs the same 30 questions through the agent, scores results |
+| `agent_tools.py` | 5 (Path B) | Bridges the agent's tool calls to the two real engines, incl. `aggregate_hcp_stats` |
+| `ground_truth.py` | 5 (eval) | Shared live-answer computation + verified narrative facts, used by every eval file below |
+| `test_the_system.py` | 5 (eval) | Runs the 30 golden questions through Path A, 3-layer scoring |
+| `test_the_agent.py` | 5 (eval) | Runs the same 30 questions through Path B, 3-layer scoring |
+| `test_phrasing_consistency.py` | 5 (eval) | Re-runs 10 of the 30 questions with genuine rewordings |
+| `test_retrieval_ranking.py` | 5 (eval) | Checks the correct chunk is ranked #1, not just present |
+| `test_numeric_accuracy.py` | 5 (eval) | Checks the agent's own computed math against live ground truth |
 | `llm_client.py` | 6 | The real interface to Claude (or a free offline stand-in) |
 | `agent.py` | 6 | Orchestrator - tool loop, answer synthesis, self-audit |
 | `chat_ui.py` | 7 | Local web interface showing the answer plus its evidence |
@@ -83,28 +101,33 @@ In this project, all of the above is synthetic data generated to look like the r
 ```bash
 pip install -r requirements.txt
 
-python main.py                 # build the knowledge base (chunk, tag, embed)
+python main.py                          # build the knowledge base (chunk, tag, embed)
 
-python test_the_system.py      # test Path A - the regex router (free, no API key)
-python test_the_agent.py       # test Path B - the agent (free in mock mode, no API key needed)
+python test_the_system.py               # test Path A - the regex router (free, no API key)
+python test_the_agent.py                # test Path B - the agent (free in mock mode, no API key needed)
+python test_phrasing_consistency.py     # does rewording a question change the answer? (free in mock mode)
+python test_retrieval_ranking.py        # is the right document chunk ranked #1? (always free, no LLM used)
+python test_numeric_accuracy.py         # is the agent's own maths correct? (needs a live model to mean anything)
 
-export ANTHROPIC_API_KEY=...   # Windows: set ANTHROPIC_API_KEY=...
+export ANTHROPIC_API_KEY=...            # Windows: set ANTHROPIC_API_KEY=...
 python agent.py "Who should I target next month in New York, and what should I say to them?"
-python agent.py                # interactive session, with conversation memory
-python chat_ui.py               # web interface at http://localhost:8017
+python agent.py                          # interactive session, with conversation memory
+python chat_ui.py                        # web interface at http://localhost:8017
 ```
 
-`test_the_agent.py` runs in one of two modes automatically, depending on whether a key is set:
-- **Mock mode** (no key) - free, deterministic, checks tool selection and retrieval only.
+`test_the_agent.py` and `test_phrasing_consistency.py` run in one of two modes automatically, depending on whether a key is set:
+- **Mock mode** (no key) - free, deterministic, checks tool selection and retrieval only - a real, but weaker, signal.
 - **Real mode** (key set) - additionally checks answer quality and the audit verdict, using the real model.
 
-CI (`.github/workflows/eval.yml`) runs the full build plus both test files, in mock mode, on every push and pull request - so a change that breaks routing, retrieval, or the agent loop turns the commit red before it reaches anyone. It also runs `challenger_validation.py`'s model-gap digest.
+`test_retrieval_ranking.py` never uses the LLM at all (it calls the search engine directly), so it's always free regardless of whether a key is set.
+
+CI (`.github/workflows/eval.yml`) runs the full build plus `test_the_system.py` and `test_the_agent.py`, in mock mode, on every push and pull request - so a change that breaks routing, retrieval, or the agent loop turns the commit red before it reaches anyone. It also runs `challenger_validation.py`'s model-gap digest.
 
 ---
 
 ## Current status / known limitations
 
-- **Retrieval confidence on some narrative questions is modest** - a known limitation of the fast, free embedding model on short or informally-phrased questions, not a bug. A better embedding model would fix it; parked for now since this is a demonstration system.
+- **The embedding model sometimes misses the right chunk, or ranks a worse one above it.** Confirmed directly by `test_retrieval_ranking.py` against the real embedding model: 4 of 10 narrative questions didn't rank their correct chunk first, and one didn't retrieve it at all even with a well-formed query. This is a genuine limitation of the embedding model itself (`all-MiniLM-L6-v2`), not a routing or prompting problem - the real fix (hybrid keyword + semantic search) is a larger piece of work, deliberately not undertaken for this showcase.
 - **`distill_router.py` is a real experiment, not live** - it isn't wired into `chat_ui.py`, so it doesn't affect what a rep actually sees today.
 - Both Path A and Path B sit on the same Layer 4 engines - a change to those engines affects both, so both are kept in sync deliberately, not by accident.
 
