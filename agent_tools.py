@@ -143,6 +143,52 @@ TOOL_SCHEMAS = [
         },
     },
     {
+        "name": "aggregate_hcp_stats",
+        "description": (
+            "Computes a TRUE aggregate statistic (mean or count) over ALL HCPs "
+            "matching a filter - not just a capped sample. Use this instead of "
+            "query_hcp_table whenever a question asks for an AVERAGE or "
+            "PERCENTAGE over a group (e.g. 'average propensity for endocrinologists "
+            "in Florida', 'what percentage are in the Watch tier'). "
+            "query_hcp_table caps at 25 rows, so computing an average from its "
+            "results is often WRONG for any group larger than 25 - this tool "
+            "computes the real number directly, over every matching row, and "
+            "returns only the number (not raw rows), so it works correctly no "
+            "matter how large the group is."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "column": {"type": "string",
+                           "description": "Which column to average, e.g. 'propensity_score', "
+                                          "'rx_volume_monthly'. Required for an average."},
+                "state": {"type": "string", "description": "Optional state filter"},
+                "specialty": {"type": "string",
+                              "description": "Optional specialty filter: Primary Care, Endocrinology, Obesity Medicine"},
+                "tier": {"type": "string", "description": "Optional tier filter: High, Medium, Watch"},
+                "active_only": {"type": "boolean",
+                                "description": "REQUIRED CHECK, every time you call this tool: does "
+                                               "the question contain the word 'active' (e.g. 'active "
+                                               "writers', 'active prescribers')? If yes, this MUST be "
+                                               "set to true - not optional, not inferred from context. "
+                                               "Omitting it when the question says 'active' silently "
+                                               "computes the wrong statistic over the WRONG group (all "
+                                               "HCPs, including ones who write zero scripts) - found via "
+                                               "testing (2026-07-28): omitting this gave 31.3% instead of "
+                                               "the correct 39.6% for an 'active writers in Texas' "
+                                               "question, because it silently included 538 non-writers "
+                                               "who should have been excluded."},
+                "percentage_of": {"type": "string",
+                                   "description": "Optional: instead of an average, compute what PERCENTAGE of "
+                                                  "the matching group has this column equal to percentage_value "
+                                                  "(e.g. column='targeted', percentage_of + percentage_value=1 "
+                                                  "answers 'what % are targeted')."},
+                "percentage_value": {"type": "string",
+                                      "description": "The value to check for when using percentage_of, e.g. '1' or 'High'."},
+            },
+        },
+    },
+    {
         "name": "states_summary",
         "description": "Which states have the most High-tier HCPs. Returns the top N states with counts.",
         "input_schema": {
@@ -249,9 +295,55 @@ def _count_active_writers(inp):
     return {"source": "hcp_propensity_table", **data}
 
 
+def _aggregate_hcp_stats(inp):
+    """Computes a real aggregate (mean or percentage) over EVERY matching
+    row, not a capped sample - returns just the number and a count, so
+    it's cheap and correct regardless of how large the matching group is.
+    Added 2026-07-28 after test_numeric_accuracy.py found the agent
+    honestly declining to answer average/percentage questions because
+    query_hcp_table's 25-row cap made a true computation impossible."""
+    sub = query_spreadsheet.df
+    for col, val in (("state", inp.get("state")), ("specialty", inp.get("specialty")),
+                     ("tier", inp.get("tier"))):
+        if val:
+            sub = sub[sub[col].str.lower() == str(val).lower()]
+    if inp.get("active_only"):
+        sub = sub[~sub["zero_writer"]]
+
+    if len(sub) == 0:
+        return {"error": "No HCPs match those filters.", "count": 0}
+
+    if inp.get("percentage_of"):
+        col = inp["percentage_of"]
+        raw_val = inp.get("percentage_value")
+        if col not in sub.columns:
+            return {"error": f"'{col}' is not a real column."}
+        try:
+            match = sub[col].str.lower() == str(raw_val).lower()
+        except AttributeError:
+            try:
+                match = sub[col] == type(sub[col].iloc[0])(raw_val)
+            except (ValueError, TypeError):
+                match = sub[col].astype(str) == str(raw_val)
+        return {"source": "hcp_propensity_table", "count": len(sub),
+                "percentage": round(100 * match.sum() / len(sub), 1),
+                "matching_count": int(match.sum())}
+
+    column = inp.get("column", "propensity_score")
+    if column not in sub.columns:
+        return {"error": f"'{column}' is not a real column."}
+    return {"source": "hcp_propensity_table", "count": len(sub),
+            "mean": round(float(sub[column].mean()), 3)}
+
+
 def _states_summary(inp):
     data = query_spreadsheet.states_by_high_tier(int(inp.get("n", 5)))
-    return {"source": "hcp_propensity_table", "high_tier_hcps_by_state": data["results"]}
+    # Include the tier the underlying function actually used (currently
+    # always "High") - was silently dropped before, which meant nothing
+    # downstream (evals, audits, callers) could verify which tier this
+    # summary was actually computed against.
+    return {"source": "hcp_propensity_table", "tier": data.get("tier", "High"),
+            "high_tier_hcps_by_state": data["results"]}
 
 
 def _search_documents(inp):
@@ -286,6 +378,7 @@ _EXECUTORS = {
     "query_hcp_table": _query_hcp_table,
     "lookup_hcp": _lookup_hcp,
     "count_active_writers": _count_active_writers,
+    "aggregate_hcp_stats": _aggregate_hcp_stats,
     "states_summary": _states_summary,
     "search_documents": _search_documents,
 }
