@@ -21,7 +21,7 @@ Weekly injection. ~$13.54B 2025 global sales. Fast launch trajectory, reaching h
 ## Mechanism Comparison
 - Semaglutide (Ozempic/Wegovy): GLP-1 receptor agonist.
 - Tirzepatide (Mounjaro/Zepbound): GLP-1 and GIP receptor *agonist* (dual agonist).
-- Rabivy (maridebart cafraglutide): GLP-1 receptor agonism combined with GIP receptor *antagonism*, delivered via an antibody conjugate. Distinct from tirzepatide's dual-agonist approach.
+- Rabivy (trelaglutide): GLP-1 receptor agonism combined with GIP receptor *antagonism*, delivered via an antibody conjugate. Distinct from tirzepatide's dual-agonist approach.
 
 ## Where Rabivy Wins
 - Dosing: monthly (or less frequent) vs weekly for every competitor. The clearest, most defensible differentiator.

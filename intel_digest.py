@@ -47,7 +47,7 @@ INGESTED_DIR = os.path.join("docs", "competitive_feed")
 OUTPUT_DIR = "output"
 
 # ---- What "noteworthy" means for THIS brand: the strategy lens ------
-BRAND_CONTEXT = """Rabivy (maridebart cafraglutide) is AX Pharmaceuticals'
+BRAND_CONTEXT = """Rabivy (trelaglutide) is AX Pharmaceuticals'
 investigational GLP-1/GIP-antagonist antibody-peptide conjugate for obesity,
 positioned on: (1) monthly dosing vs weekly competitors, (2) durable weight
 loss without plateau, (3) tolerability. Main competitors: Novo Nordisk
@@ -201,7 +201,7 @@ SIMULATED_BATCH = [
      "semaglutide depot formulation achieved 12.9% mean weight loss at 48 weeks "
      "(n=384), with discontinuation for GI events of 6.1%. A phase 3 program is "
      "planned to start within the year. Monthly dosing has until now been a "
-     "differentiator unique to investigational agents such as maridebart cafraglutide."),
+     "differentiator unique to investigational agents such as trelaglutide."),
     ("publication", "Eli Lilly", "NEJM (simulated)",
      "Publication: tirzepatide cardiovascular outcomes trial meets primary endpoint",
      "Full results of the cardiovascular outcomes trial in adults with obesity "

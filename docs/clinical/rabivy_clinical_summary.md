@@ -4,7 +4,7 @@ Clinical reference. Investigational agent - Phase 2 data only; Phase 3 ongoing. 
 
 ## Molecule and Mechanism
 
-Rabivy (maridebart cafraglutide) is an antibody-peptide conjugate: a monoclonal antibody targeting the GIP receptor (GIPR), conjugated to two GLP-1 receptor agonist peptides via amino acid linkers. The design combines GLP-1 receptor agonism with GIP receptor antagonism. This differs from marketed dual-incretin therapy (tirzepatide), which is a GLP-1/GIP dual *agonist*. The antibody backbone confers a long half-life (\~21 days), enabling monthly or less-frequent subcutaneous dosing.
+Rabivy (trelaglutide) is an antibody-peptide conjugate: a monoclonal antibody targeting the GIP receptor (GIPR), conjugated to two GLP-1 receptor agonist peptides via amino acid linkers. The design combines GLP-1 receptor agonism with GIP receptor antagonism. This differs from marketed dual-incretin therapy (tirzepatide), which is a GLP-1/GIP dual *agonist*. The antibody backbone confers a long half-life (\~21 days), enabling monthly or less-frequent subcutaneous dosing.
 
 ## Phase 2 Results (52 Weeks)
 

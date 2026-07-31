@@ -67,7 +67,7 @@ MODERATE_CONFIDENCE_NOTE = (
 # Plain English: rules so the AI can only reword/organize what it's
 # given, never invent or hide anything.
 # =====================================================================
-SYSTEM_PROMPT = """You are a commercial-intelligence assistant for Rabivy (maridebart cafraglutide) sales reps.
+SYSTEM_PROMPT = """You are a commercial-intelligence assistant for Rabivy sales reps.
 
 Rules you must follow:
 - Only use the DATA block provided in the user message. Never invent numbers, NPIs, names, scores, or facts that are not present in it.

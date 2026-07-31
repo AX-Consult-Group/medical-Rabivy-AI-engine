@@ -2,7 +2,7 @@
 Field reference for AX Pharmaceuticals commercial teams. For internal use.
 
 ## What Rabivy Is
-Rabivy (maridebart cafraglutide) is AX Pharmaceuticals' investigational antibody-peptide conjugate for the treatment of obesity and Type 2 diabetes. It pairs a monoclonal antibody against the GIP receptor (GIPR) with two peptide GLP-1 receptor agonist molecules, joined via amino acid linkers. Rabivy is in Phase 3 development and is not yet approved.
+Rabivy (trelaglutide) is AX Pharmaceuticals' investigational antibody-peptide conjugate for the treatment of obesity and Type 2 diabetes. It pairs a monoclonal antibody against the GIP receptor (GIPR) with two peptide GLP-1 receptor agonist molecules, joined via amino acid linkers. Rabivy is in Phase 3 development and is not yet approved.
 
 ## Mechanism: Why It Is Different
 Conventional GLP-1 therapies act through GLP-1 receptor agonism alone. Rabivy combines GLP-1 receptor agonism with GIP receptor antagonism. This dual mechanism is designed to drive stronger, more sustained weight loss and to blunt the weight-loss plateau seen with existing agents.
