@@ -201,6 +201,7 @@ Check every factual claim in the answer:
 - supported: the claim appears in the evidence
 - unsupported: the claim does NOT appear in the evidence (invented/hallucinated)
 - contradicted: the evidence says something different
+- For any claim attributed to a specific named source ('according to X', 'per Y et al.'), check that the evidence chunk or chunks (it may ask for multiple sources) it's actually drawn from has that document as its doc field — flag as contradicted or incomplete if the named source doesn't match.
 
 The following are SUPPORTED, never issues (do not flag them):
 - rounding and formatting AT ANY PRECISION, for ANY numeric field, not
