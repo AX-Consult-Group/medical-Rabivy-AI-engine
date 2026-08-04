@@ -383,20 +383,52 @@ def _haystack(data):
     return json.dumps(data, default=str).lower()
 
 
+def _narrative_retrieval_detail(data, expected_tags):
+    """For a narrative question, pulls the ranked/scored chunk list
+    straight out of the SAME semantic_search() call the router already
+    made to answer this question - not a new lookup. Same data shape
+    test_retrieval_ranking.py reads (data["results"] = [{"chunk": {...
+    "chunk_id"...}, "score": ...}]), except every returned chunk gets
+    recorded here, not just the top one. Mirrors test_the_agent.py's
+    _narrative_retrieval_detail exactly, just against the router's
+    data shape (results/chunk/score) instead of the agent's flattened
+    tool-result shape (sections/chunk_id/similarity) - same fields in
+    the output either way, so the two files' records line up."""
+    results = data.get("results", [])
+    rank = None
+    top_results = []
+    for i, r in enumerate(results, start=1):
+        chunk_id = r.get("chunk", {}).get("chunk_id", "")
+        is_expected = gt.any_present(chunk_id.lower(), expected_tags)
+        if is_expected and rank is None:
+            rank = i
+        top_results.append({"chunk_id": chunk_id, "similarity": r.get("score"),
+                            "is_expected": is_expected})
+    return {"expected_tag": expected_tags, "rank": rank, "top_results": top_results}
+
+
 def _layer1(t, engine):
-    return t["expect_engine"] in engine
+    """Returns (ok, detail) - detail carries the expected engine AND
+    the actual one chosen, not just the pass/fail (previously only
+    the bool reached the record, so a FAIL gave no clue what engine
+    was picked instead)."""
+    expected = t["expect_engine"]
+    ok = expected in engine
+    return ok, {"expected": expected, "actual": engine}
 
 
 def _layer2(t, engine, data):
-    """Returns (status, detail) - status is PASS / FAIL / SKIP."""
+    """Returns (status, detail) - status is PASS / FAIL / SKIP. detail
+    now always carries expected AND actual, not just the mismatches -
+    a PASS used to collapse to the string "filters matched" with no
+    record of what was actually sent."""
     if "rules_check" in t:
         ok = t["rules_check"](engine, data)
         return ("PASS" if ok else "FAIL"), "rules_check"
     if "expect_filters" in t:
-        filters = data.get("filters", {})
-        mismatches = {k: (v, filters.get(k)) for k, v in t["expect_filters"].items()
-                      if filters.get(k) != v}
-        return ("PASS" if not mismatches else "FAIL"), (mismatches or "filters matched")
+        actual_filters = data.get("filters", {})
+        ok = all(actual_filters.get(k) == v for k, v in t["expect_filters"].items())
+        return ("PASS" if ok else "FAIL"), {"expected": t["expect_filters"], "actual": actual_filters}
     if "expect_tag" in t:
         ok = gt.any_present(_haystack(data), t["expect_tag"])
         return ("PASS" if ok else "FAIL"), t["expect_tag"]
@@ -405,30 +437,33 @@ def _layer2(t, engine, data):
         if spec["tag"] is None:
             return "SKIP", "no verified tag yet"
         ok = gt.any_present(_haystack(data), spec["tag"])
-        return ("PASS" if ok else "FAIL"), spec["tag"]
+        return ("PASS" if ok else "FAIL"), _narrative_retrieval_detail(data, spec["tag"])
     return "SKIP", "no separate rule beyond correct routing/refusal for this question"
 
 
-def _layer3(t, engine, data):
-    """Returns (status, detail) - status is PASS / FAIL / SKIP."""
+def _layer3(t, engine, data, answer_text=None):
+    """Returns (status, detail) - status is PASS / FAIL / SKIP. detail
+    is {"expected": ..., "actual": answer_text} wherever there's a
+    live comparison - the actual formatted answer used to be printed
+    to the console and nowhere else; it now travels with the record."""
     haystack = _haystack(data)
     if "narrative_key" in t:
         spec = gt.NARRATIVE_FACTS[t["narrative_key"]]
         if spec["facts"] is not None:
             ok = gt.all_present(haystack, spec["facts"])
-            return ("PASS" if ok else "FAIL"), spec["facts"]
+            return ("PASS" if ok else "FAIL"), {"expected": spec["facts"], "actual": answer_text}
         if spec.get("state"):
             fact = gt.gt_state_market_fact(spec["state"])
             if fact is None:
                 return "SKIP", "could not parse the live doc"
             ok = fact in haystack
-            return ("PASS" if ok else "FAIL"), f"expected {fact} (parsed live from the doc)"
+            return ("PASS" if ok else "FAIL"), {"expected": fact, "actual": answer_text}
         if spec.get("specialty"):
             facts = gt.gt_specialty_benchmark_facts(spec["specialty"])
             if facts is None:
                 return "SKIP", "could not compute live specialty facts"
             ok = gt.all_present(haystack, facts)
-            return ("PASS" if ok else "FAIL"), f"expected {facts} (computed live from the dataframe)"
+            return ("PASS" if ok else "FAIL"), {"expected": facts, "actual": answer_text}
     gt_fn = t.get("ground_truth")
     if gt_fn is None:
         return "SKIP", "no live ground truth for this question (see note above)"
@@ -440,9 +475,9 @@ def _layer3(t, engine, data):
         # CLARIFICATION_FACTS or a comma/no-comma population variant) -
         # all_present handles both item types correctly.
         ok = gt.all_present(haystack, truth)
-        return ("PASS" if ok else "FAIL"), f"expected all of {truth}"
+        return ("PASS" if ok else "FAIL"), {"expected": truth, "actual": answer_text}
     ok = str(truth).lower() in haystack
-    return ("PASS" if ok else "FAIL"), f"expected {truth}"
+    return ("PASS" if ok else "FAIL"), {"expected": truth, "actual": answer_text}
 
 
 _BAR = "=" * 72
@@ -473,7 +508,7 @@ def run():
             records.append({"q": t["q"], "crash": str(e)})
             continue
 
-        l1_ok = _layer1(t, engine)
+        l1_ok, l1_detail = _layer1(t, engine)
         tally["layer1"]["PASS" if l1_ok else "FAIL"] += 1
         print(f"  LAYER 1 (routing) : {'PASS' if l1_ok else 'FAIL'}  (got: {engine})")
 
@@ -481,18 +516,25 @@ def run():
         tally["layer2"][l2_status] += 1
         print(f"  LAYER 2 (rules)   : {l2_status}  ({l2_detail})")
 
-        l3_status, l3_detail = _layer3(t, engine, data)
-        tally["layer3"][l3_status] += 1
-        print(f"  LAYER 3 (answer)  : {l3_status}  ({l3_detail})")
-
+        answer_text = None
         try:
             answer_text = ask_a_question.format_answer(engine, data)
-            print(f"  ANSWER: {answer_text}")
         except Exception as e:
             print(f"  !! format_answer() raised {type(e).__name__}: {e}")
 
-        records.append({"q": t["q"], "engine": engine, "layer1": l1_ok,
-                        "layer2": l2_status, "layer3": l3_status})
+        l3_status, l3_detail = _layer3(t, engine, data, answer_text)
+        tally["layer3"][l3_status] += 1
+        print(f"  LAYER 3 (answer)  : {l3_status}  ({l3_detail})")
+
+        if answer_text is not None:
+            print(f"  ANSWER: {answer_text}")
+
+        records.append({
+            "q": t["q"], "answer": answer_text,
+            "layer1": l1_ok, "layer1_detail": l1_detail,
+            "layer2": l2_status, "layer2_detail": l2_detail,
+            "layer3": l3_status, "layer3_detail": l3_detail,
+        })
 
     print(f"\n{_BAR}\nSUMMARY\n{_BAR}")
     print(f"Layer 1 (routing) : {tally['layer1']['PASS']} PASS / {tally['layer1']['FAIL']} FAIL")

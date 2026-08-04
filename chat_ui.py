@@ -16,6 +16,29 @@
 #                evidence, and releases or rejects the answer
 #                explicitly. Decisions are logged to
 #                output/review_log.jsonl as the governance trail.
+#   QUERY LOG  - every single call to /ask writes one line to
+#                output/QUERY_LOG/query_log.jsonl: the question, the
+#                answer, every gate result, the full audit trail, and
+#                the trimmed evidence - whether the answer was
+#                delivered, quarantined, or the request errored out.
+#                Nothing that comes in is allowed to go un-logged.
+#                Each entry gets a query_id, which is how an RLHF
+#                rating (below) is tied back to the exact query it's
+#                rating.
+#   RLHF       - a correct / partially correct / wrong control under
+#                every answer the user actually sees (delivered, or a
+#                quarantined answer once a reviewer releases it).
+#                Every rating - including "wrong", including a blank
+#                note - writes one line to
+#                output/RLHF_FEEDBACK/rlhf_log.jsonl, keyed by
+#                query_id back to the query log entry it's rating.
+#                This is the human-feedback signal the golden test set
+#                can't give you: real questions, real people.
+#
+#   All three logs (query, RLHF, human review) live under output/ in
+#   their own clearly named ALL-CAPS subfolder - output/QUERY_LOG/,
+#   output/RLHF_FEEDBACK/, output/HUMAN_REVIEW/ - rather than as loose
+#   files, so output/ stays scannable as it grows.
 #
 #   python chat_ui.py          -> open http://localhost:8017
 #
@@ -29,12 +52,15 @@ import os
 import re
 import threading
 import time
+import uuid
 import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from agent import RabivyAgent
 
-REVIEW_LOG = os.path.join("output", "review_log.jsonl")
+REVIEW_LOG = os.path.join("output", "HUMAN_REVIEW", "review_log.jsonl")
+QUERY_LOG = os.path.join("output", "QUERY_LOG", "query_log.jsonl")
+RLHF_LOG = os.path.join("output", "RLHF_FEEDBACK", "rlhf_log.jsonl")
 
 PORT = 8017
 
@@ -122,6 +148,47 @@ def _gates(result, evidence_view):
     return gates
 
 
+def _append_jsonl(path, entry):
+    """Adds one JSON object as a new line to a log file, creating
+    output/ if it doesn't exist yet. Append-only, same pattern as
+    REVIEW_LOG already used - a log is a record, never edited in
+    place."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, default=str) + "\n")
+
+
+def _new_query_id():
+    """A short, sortable-enough id for one /ask call. Not a full UUID
+    on purpose - this shows up in the browser's network tab and in the
+    RLHF POST body, so it stays readable."""
+    return time.strftime("q_%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:6]
+
+
+def _log_query(query_id, question, status, result=None, gates=None,
+               evidence_view=None, error=None):
+    """Writes one line to output/QUERY_LOG/query_log.jsonl for every /ask call,
+    no matter how it ends up: delivered straight away, held in
+    quarantine, or blown up with a server error. status is one of
+    "delivered", "quarantined", or "error" - the same three outcomes
+    the browser already shows the user, just persisted this time
+    instead of only ever living in one browser tab."""
+    entry = {
+        "query_id": query_id,
+        "asked_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "question": question,
+        "status": status,
+        "answer": (result or {}).get("answer") if result else None,
+        "verdict": (result.get("verification") or {}).get("verdict") if result else None,
+        "revised": (result or {}).get("revised") if result else None,
+        "gates": gates or [],
+        "audit_trail": (result or {}).get("audit_trail", []) if result else [],
+        "evidence": evidence_view or [],
+        "error": error,
+    }
+    _append_jsonl(QUERY_LOG, entry)
+
+
 PAGE = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -186,6 +253,19 @@ PAGE = r"""<!DOCTYPE html>
   .qapprove{background:#fff;border-color:#9fd9be;color:var(--ok)}
   .qreject{background:#fff;border-color:#f0b1b1;color:var(--bad)}
   .qdecided{font-size:12px;font-weight:700;margin-top:8px}
+  /* rlhf */
+  .rlhf{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+  .rlhf-label{font-size:11px;color:var(--muted);margin-bottom:6px}
+  .rlhf-btns{display:flex;gap:8px;flex-wrap:wrap}
+  .rlhf-btn{padding:6px 12px;font-size:11.5px;font-weight:600;border-radius:20px;
+            border:1.5px solid var(--line);background:#fff;cursor:pointer;color:var(--muted)}
+  .rlhf-btn:hover{border-color:var(--brand);color:var(--brand)}
+  .rlhf-note{width:100%;margin-top:8px;display:none}
+  .rlhf-note textarea{width:100%;font:inherit;font-size:12px;padding:8px;border:1.5px solid var(--line);
+                       border-radius:8px;resize:vertical;min-height:50px;box-sizing:border-box}
+  .rlhf-note button{margin-top:6px;padding:5px 14px;font-size:11.5px;font-weight:600;color:#fff;
+                     background:var(--brand);border:none;border-radius:8px;cursor:pointer}
+  .rlhf-done{font-size:11.5px;font-weight:700;color:var(--ok)}
   .thinking{color:var(--muted);font-size:13px}
   .dots::after{content:'';animation:d 1.2s infinite}
   @keyframes d{0%{content:'.'}33%{content:'..'}66%{content:'...'}}
@@ -277,13 +357,55 @@ function logReview(question,d,decision){
     body:JSON.stringify({question:question,verdict:d.verdict,decision:decision,
                          issues:(last.issues||[]).map(String)})}).catch(()=>{});
 }
+function rlhfHtml(){
+  return '<div class="rlhf"><div class="rlhf-label">Was this answer correct?</div>'
+    +'<div class="rlhf-btns">'
+    +'<button class="rlhf-btn" data-rating="correct">&#10003; Correct</button>'
+    +'<button class="rlhf-btn" data-rating="partial">&#8211; Partially correct</button>'
+    +'<button class="rlhf-btn" data-rating="wrong">&#10007; Wrong</button>'
+    +'</div>'
+    +'<div class="rlhf-note"><textarea placeholder="What was wrong or missing? (optional)"></textarea>'
+    +'<button class="rlhf-submit">Submit</button></div></div>';
+}
+function submitRlhf(queryId,question,rating,note,box){
+  fetch('/rlhf',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({query_id:queryId,question:question,rating:rating,note:note||''})}).catch(()=>{});
+  const labels={correct:'Marked correct',partial:'Marked partially correct',wrong:'Marked wrong'};
+  box.outerHTML='<div class="rlhf"><div class="rlhf-done">&#10003; '+esc(labels[rating]||'Feedback recorded')+' &mdash; thank you</div></div>';
+}
+// Every query the agent answers gets a query_id from the server (see
+// _new_query_id in chat_ui.py); wireRlhf is what ties a rating back to
+// that exact query. "Correct" submits immediately - partial/wrong open
+// a small optional note first, since JB specifically wanted the human
+// to be able to say *what* was wrong, not just flag that it was.
+function wireRlhf(node,queryId,question){
+  const box=node.querySelector('.rlhf');
+  if(!box)return;
+  const noteBox=box.querySelector('.rlhf-note');
+  let pending=null;
+  box.querySelectorAll('.rlhf-btn').forEach(btn=>{
+    btn.onclick=()=>{
+      const rating=btn.dataset.rating;
+      if(rating==='correct'){ submitRlhf(queryId,question,rating,'',box); return; }
+      pending=rating;
+      noteBox.style.display='block';
+      box.querySelectorAll('.rlhf-btn').forEach(b=>b.disabled=(b.dataset.rating!==rating));
+    };
+  });
+  noteBox.querySelector('.rlhf-submit').onclick=()=>{
+    const note=noteBox.querySelector('textarea').value.trim();
+    submitRlhf(queryId,question,pending,note,box);
+  };
+}
 function addAnswer(d,question){
   if(d.quarantined){ addQuarantined(d,question); return; }
   let h='<div class="msg bot"><div class="who">Assistant</div><div class="bubble">'+md(d.answer);
   h+='<div class="gates">'+d.gates.map(gateHtml).join('')+'</div>';
   h+=detailsHtml(d);
+  h+=rlhfHtml();
   h+='</div></div>';
-  chat.appendChild(el(h)); chat.scrollTop=chat.scrollHeight;
+  const node=el(h); chat.appendChild(node); chat.scrollTop=chat.scrollHeight;
+  wireRlhf(node,d.query_id,question);
 }
 function addQuarantined(d,question){
   const last=(d.audit_trail||[]).slice(-1)[0]||{};
@@ -305,7 +427,11 @@ function addQuarantined(d,question){
       '<div class="bubble">'+md(d.answer)
       +'<div class="gates">'+d.gates.map(gateHtml).join('')+'</div>'
       +detailsHtml(d)
-      +'<div class="qdecided" style="color:var(--ok)">&#10003; Released by reviewer (decision logged)</div></div>';
+      +'<div class="qdecided" style="color:var(--ok)">&#10003; Released by reviewer (decision logged)</div>'
+      +rlhfHtml()+'</div>';
+    // Only wire the RLHF widget once the answer is actually visible to
+    // a user - a rejected quarantined answer never gets a widget at all.
+    wireRlhf(node,d.query_id,question);
   };
   node.querySelector('.qreject').onclick=()=>{
     logReview(question,d,'rejected');
@@ -352,9 +478,14 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/review":
             self._handle_review()
             return
+        if self.path == "/rlhf":
+            self._handle_rlhf()
+            return
         if self.path != "/ask":
             self.send_error(404)
             return
+        question = ""
+        query_id = _new_query_id()
         try:
             length = int(self.headers.get("Content-Length", 0))
             payload = json.loads(self.rfile.read(length) or b"{}")
@@ -364,23 +495,30 @@ class Handler(BaseHTTPRequestHandler):
             with _agent_lock:
                 result = _agent.ask(question)
             ev = _evidence_view(result["evidence"])
+            gates = _gates(result, ev)
             verdict = (result.get("verification") or {}).get("verdict")
+            # Quarantine rule: only a clean audit pass ships directly.
+            # "fail" and "audit_error" are withheld for a human.
+            # "not_checked" (offline mode, no auditor) is delivered
+            # but clearly labeled by its gate.
+            quarantined = verdict in ("fail", "audit_error")
+            _log_query(query_id, question, "quarantined" if quarantined else "delivered",
+                       result=result, gates=gates, evidence_view=ev)
             body = json.dumps({
+                "query_id": query_id,
                 "answer": result["answer"],
-                "gates": _gates(result, ev),
+                "gates": gates,
                 "trace": ev,
                 "audit_trail": result.get("audit_trail", []),
                 "draft_answer": result.get("draft_answer"),
                 "verdict": verdict,
-                # Quarantine rule: only a clean audit pass ships directly.
-                # "fail" and "audit_error" are withheld for a human.
-                # "not_checked" (offline mode, no auditor) is delivered
-                # but clearly labeled by its gate.
-                "quarantined": verdict in ("fail", "audit_error"),
+                "quarantined": quarantined,
             }, default=str).encode("utf-8")
             self.send_response(200)
         except Exception as e:
-            body = json.dumps({"answer": f"Server error: {type(e).__name__}: {e}",
+            _log_query(query_id, question, "error", error=f"{type(e).__name__}: {e}")
+            body = json.dumps({"query_id": query_id,
+                               "answer": f"Server error: {type(e).__name__}: {e}",
                                "gates": [], "trace": [], "audit_trail": [],
                                "draft_answer": None}).encode("utf-8")
             self.send_response(500)
@@ -404,9 +542,40 @@ class Handler(BaseHTTPRequestHandler):
                               else "rejected"),
                 "issues": payload.get("issues", [])[:10],
             }
-            os.makedirs("output", exist_ok=True)
+            os.makedirs(os.path.dirname(REVIEW_LOG), exist_ok=True)
             with open(REVIEW_LOG, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry) + "\n")
+            body = json.dumps({"ok": True}).encode("utf-8")
+            self.send_response(200)
+        except Exception as e:
+            body = json.dumps({"ok": False, "error": str(e)}).encode("utf-8")
+            self.send_response(500)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _handle_rlhf(self):
+        """Records a human rating (correct / partial / wrong) on an
+        answer the user actually saw. Every rating is logged, including
+        a plain "correct" with no note - the point is a complete
+        record of every judgment made, not just the interesting ones.
+        query_id ties this row back to the exact question and answer
+        in output/QUERY_LOG/query_log.jsonl."""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            rating = str(payload.get("rating", ""))
+            if rating not in ("correct", "partial", "wrong"):
+                raise ValueError(f"unrecognised rating: {rating!r}")
+            entry = {
+                "rated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "query_id": str(payload.get("query_id", ""))[:80],
+                "question": str(payload.get("question", ""))[:500],
+                "rating": rating,
+                "note": (str(payload.get("note", "")).strip()[:1000] or None),
+            }
+            _append_jsonl(RLHF_LOG, entry)
             body = json.dumps({"ok": True}).encode("utf-8")
             self.send_response(200)
         except Exception as e:

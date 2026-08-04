@@ -217,7 +217,7 @@ TOOL_SCHEMAS = [
                                          "filters the search to that state's documents "
                                          "only. Leave unset for questions not about a "
                                          "specific state.")},
-                "top_k": {"type": "integer", "description": "Sections to return (default 4, max 8)"},
+                "top_k": {"type": "integer", "description": "Sections to return (default 5, max 8)"},
             },
             "required": ["query"],
         },
@@ -354,7 +354,11 @@ def _search_documents(inp):
     # Also now takes state as its own explicit parameter rather than
     # relying on the state name being embedded in the free-text query -
     # see the "state" field added to this tool's input_schema above.
-    top_k = min(int(inp.get("top_k", 4)), 8)
+    # 2026-08-04: default raised from 4 to 5 to match search_documents.py's
+    # own default and the "found within top 5" bar the eval scripts
+    # (test_retrieval_ranking.py, test_article_retrieval.py) already use -
+    # the agent's default was quietly stricter than what the eval measured.
+    top_k = min(int(inp.get("top_k", 5)), 8)
     data = search_documents.semantic_search(
         inp["query"], state=inp.get("state"), top_k=top_k)
     if not data.get("found", True):

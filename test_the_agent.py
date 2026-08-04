@@ -411,12 +411,38 @@ def _tools_called(evidence):
 
 def _filters_match_anywhere(evidence, expected):
     """True if ANY single tool call's input matches every expected
-    key/value (bool/int compared loosely, e.g. False == 0)."""
+    key/value (bool/int compared loosely, e.g. False == 0). Also
+    returns the actual input in play - the matching call's input on a
+    PASS, every call's input on a FAIL - so a failure record shows
+    what was actually sent, not just that it didn't match."""
     for e in evidence:
         inp = e.get("input", {})
         if all(inp.get(k) == v or (isinstance(v, bool) and bool(inp.get(k)) == v) for k, v in expected.items()):
-            return True
-    return False
+            return True, inp
+    return False, [e.get("input", {}) for e in evidence]
+
+
+def _narrative_retrieval_detail(evidence, expected_tags):
+    """For a narrative question, pulls the ranked/scored chunk list
+    straight out of the agent's OWN search_documents call - not a new
+    lookup, just reading data the agent already produced to answer the
+    question (agent_tools.py's _search_documents already returns each
+    chunk's similarity score, in rank order). Returns None if the
+    agent never called search_documents at all for this question."""
+    search_calls = [e for e in evidence if e["tool"] == "search_documents"]
+    if not search_calls:
+        return None
+    sections = search_calls[-1].get("result", {}).get("sections", [])
+    rank = None
+    top_results = []
+    for i, s in enumerate(sections, start=1):
+        chunk_id = s.get("chunk_id", "")
+        is_expected = gt.any_present(chunk_id.lower(), expected_tags)
+        if is_expected and rank is None:
+            rank = i
+        top_results.append({"chunk_id": chunk_id, "similarity": s.get("similarity"),
+                            "is_expected": is_expected})
+    return {"expected_tag": expected_tags, "rank": rank, "top_results": top_results}
 
 
 def _haystack(result, is_mock):
@@ -429,16 +455,21 @@ def _haystack(result, is_mock):
 
 
 def _layer1(t, evidence):
-    called = _tools_called(evidence)
+    """Returns (ok, detail). detail always carries BOTH what was
+    expected and what actually got called - previously only the bool
+    survived into the record, so a FAIL gave no clue what was chosen
+    instead of the right tool."""
+    called = sorted(_tools_called(evidence))
     if "expect_tools_any_of" in t:
         # Several DIFFERENT tool-call patterns are all legitimately
         # correct for this question - PASS if the agent's actual call
         # matches any one of them.
-        return any(set(pattern).issubset(called) for pattern in t["expect_tools_any_of"])
-    expected = set(t["expect_tools"])
-    if not expected:
-        return len(called) == 0
-    return expected.issubset(called)
+        expected = t["expect_tools_any_of"]
+        ok = any(set(pattern).issubset(called) for pattern in expected)
+    else:
+        expected = sorted(t.get("expect_tools", []))
+        ok = (len(called) == 0) if not expected else set(expected).issubset(called)
+    return ok, {"expected": expected, "actual": called}
 
 
 def _layer2(t, evidence, haystack):
@@ -446,8 +477,8 @@ def _layer2(t, evidence, haystack):
         ok = t["rules_check"](evidence)
         return ("PASS" if ok else "FAIL"), "rules_check"
     if "expect_filters" in t:
-        ok = _filters_match_anywhere(evidence, t["expect_filters"])
-        return ("PASS" if ok else "FAIL"), t["expect_filters"]
+        ok, actual = _filters_match_anywhere(evidence, t["expect_filters"])
+        return ("PASS" if ok else "FAIL"), {"expected": t["expect_filters"], "actual": actual}
     if "expect_tag" in t:
         ok = gt.any_present(haystack, t["expect_tag"])
         return ("PASS" if ok else "FAIL"), t["expect_tag"]
@@ -456,28 +487,39 @@ def _layer2(t, evidence, haystack):
         if spec["tag"] is None:
             return "SKIP", "no verified tag yet"
         ok = gt.any_present(haystack, spec["tag"])
-        return ("PASS" if ok else "FAIL"), spec["tag"]
+        # Rank + score for every retrieved chunk, correct one flagged -
+        # this is the piece that lets a dashboard tell "Yes" (rank 1)
+        # apart from "Yes, but" (present, not first) apart from "No"
+        # (missing) for the golden-test decision tree, with no extra
+        # API/embedding cost - it's the agent's own search_documents
+        # call, already made to answer this question.
+        retrieval = _narrative_retrieval_detail(evidence, spec["tag"])
+        return ("PASS" if ok else "FAIL"), (retrieval if retrieval is not None else {"expected_tag": spec["tag"]})
     return "SKIP", "no separate rule beyond correct routing/refusal for this question"
 
 
-def _layer3(t, haystack, evidence=None):
+def _layer3(t, haystack, evidence=None, answer_text=None):
+    """Returns (status, detail). detail is {"expected": ..., "actual":
+    answer_text} wherever there's a live ground-truth comparison - the
+    actual final answer used to be printed to the console (see run())
+    and nowhere else; it now travels with the record."""
     if "narrative_key" in t:
         spec = gt.NARRATIVE_FACTS[t["narrative_key"]]
         if spec["facts"] is not None:
             ok = gt.all_present(haystack, spec["facts"])
-            return ("PASS" if ok else "FAIL"), spec["facts"]
+            return ("PASS" if ok else "FAIL"), {"expected": spec["facts"], "actual": answer_text}
         if spec.get("state"):
             fact = gt.gt_state_market_fact(spec["state"])
             if fact is None:
                 return "SKIP", "could not parse the live doc"
             ok = fact in haystack
-            return ("PASS" if ok else "FAIL"), f"expected {fact} (parsed live)"
+            return ("PASS" if ok else "FAIL"), {"expected": fact, "actual": answer_text}
         if spec.get("specialty"):
             facts = gt.gt_specialty_benchmark_facts(spec["specialty"])
             if facts is None:
                 return "SKIP", "could not compute live specialty facts"
             ok = gt.all_present(haystack, facts)
-            return ("PASS" if ok else "FAIL"), f"expected {facts} (computed live)"
+            return ("PASS" if ok else "FAIL"), {"expected": facts, "actual": answer_text}
     gt_fn = t.get("ground_truth")
     if gt_fn is None:
         return "SKIP", "no live ground truth for this question"
@@ -489,9 +531,9 @@ def _layer3(t, haystack, evidence=None):
         return "SKIP", "ground truth computation returned nothing"
     if isinstance(truth, list):
         ok = gt.all_present(haystack, truth)
-        return ("PASS" if ok else "FAIL"), f"expected all of {truth}"
+        return ("PASS" if ok else "FAIL"), {"expected": truth, "actual": answer_text}
     ok = str(truth).lower() in haystack
-    return ("PASS" if ok else "FAIL"), f"expected {truth}"
+    return ("PASS" if ok else "FAIL"), {"expected": truth, "actual": answer_text}
 
 
 _BAR = "=" * 72
@@ -535,27 +577,41 @@ def run():
 
         haystack = _haystack(result, is_mock)
 
-        l1_ok = _layer1(t, result["evidence"])
+        l1_ok, l1_detail = _layer1(t, result["evidence"])
         tally["layer1"]["PASS" if l1_ok else "FAIL"] += 1
         is_known_mock_limitation = is_mock and t.get("mock_known_limitation")
         if not l1_ok and not is_known_mock_limitation:
             gating_layer1_fails += 1
         gate_note = "  (excluded from CI gate - known mock-mode limitation)" if (not l1_ok and is_known_mock_limitation) else ""
         print(f"  LAYER 1 (routing) : {'PASS' if l1_ok else 'FAIL'}  "
-              f"(called: {sorted(_tools_called(result['evidence']))}){gate_note}")
+              f"(called: {l1_detail['actual']}){gate_note}")
 
         l2_status, l2_detail = _layer2(t, result["evidence"], haystack)
         tally["layer2"][l2_status] += 1
         print(f"  LAYER 2 (rules)   : {l2_status}  ({l2_detail})")
 
-        l3_status, l3_detail = _layer3(t, haystack, result["evidence"])
+        l3_status, l3_detail = _layer3(t, haystack, result["evidence"], result["answer"])
         tally["layer3"][l3_status] += 1
         print(f"  LAYER 3 (answer)  : {l3_status}  ({l3_detail})")
 
         print(f"  ANSWER: {result['answer']}")
 
-        records.append({"q": t["q"], "tools": sorted(_tools_called(result["evidence"])),
-                        "layer1": l1_ok, "layer2": l2_status, "layer3": l3_status})
+        records.append({
+            "q": t["q"], "answer": result["answer"],
+            "layer1": l1_ok, "layer1_detail": l1_detail,
+            "layer2": l2_status, "layer2_detail": l2_detail,
+            "layer3": l3_status, "layer3_detail": l3_detail,
+            # Found 2026-08-04: agent.py's ask() already computes a
+            # hallucination-audit verdict for every question - real
+            # tokens already paid for it - but it was never written
+            # here, so a real run's audit data was silently discarded.
+            # Not needed for the golden-tree leaf (that's layer2 rank +
+            # layer3 correctness alone), but worth keeping since it's
+            # free at this point and directly relevant to comparing
+            # ground-truth correctness against the audit's own verdict.
+            "verdict": (result.get("verification") or {}).get("verdict"),
+            "audit_trail": result.get("audit_trail", []),
+        })
 
     # ---- MEMORY_SCENARIO: separate, not part of the 3-layer 30-question set ----
     print(f"\n{_BAR}\n  MEMORY SCENARIO (conversation continuity - not part of the 30)\n{_BAR}")
