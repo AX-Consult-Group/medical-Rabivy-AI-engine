@@ -616,7 +616,7 @@ def format_top_prescriber(data):
         f"{data['sort_reason']}\n"
         f"Top GLP-1 prescriber in {data['state'].title()}: NPI {data['npi']} "
         f"({data['specialty']}) - {data['rx_volume_monthly']} scripts/month, "
-        f"propensity {data['propensity_score']:.2f}, tier {data['tier']}.\n"
+        f"propensity {_format_propensity(data['propensity_score'])}, tier {data['tier']}.\n"
         f"Access: dominant payer {data['dominant_payer']}, formulary status "
         f"{data['formulary_tier']}, PA burden {data['pa_burden']:.2f}.\n"
         f"Competitive: dominant competitor {data['dominant_competitor']}, "
@@ -674,7 +674,7 @@ def format_top_n_by_propensity(data):
     lines.append(f"{count_label} {data['tier'] or ''}-tier HCPs by propensity:")
     for r in data["results"]:
         lines.append(f"  NPI {r['npi']} ({r['specialty']}, {r['state'].title()}) "
-                      f"- propensity {r['propensity_score']:.2f}, rank {r['propensity_rank']}")
+                      f"- propensity {_format_propensity(r['propensity_score'])}, rank {r['propensity_rank']}")
     return "\n".join(lines)
 
 
@@ -709,6 +709,26 @@ def _format_cell(value):
             return "n/a"
         return f"{value:.2f}"
     return str(value)
+
+
+# ---------------------------------------------------------------------
+# 2026-08-05: propensity_score gets its OWN formatter, separate from
+# _format_cell. Found via a real eval: a "typical endocrinologist"
+# comparison answered "0.367" (propensity_score's raw 0-to-1 storage
+# scale) while the ground truth - and the hand-written HCP snapshot
+# docs, which all say things like "Propensity score: 37/100" - expected
+# the 0-to-100 scale. Two different scales for the same number, so a
+# numerically-correct answer read as wrong. Standardised on the docs'
+# convention (0-100, whole number, "%") everywhere propensity_score is
+# DISPLAYED. The underlying data and every filter/sort cutoff (e.g.
+# "high" = >= 0.75) are untouched - this only changes what's shown.
+# ---------------------------------------------------------------------
+def _format_propensity(value):
+    if value is None:
+        return "n/a"
+    if isinstance(value, float) and value != value:  # NaN
+        return "n/a"
+    return f"{round(float(value) * 100)}%"
 
 
 # The always-shown columns on every row of a filtered list, regardless
@@ -804,7 +824,7 @@ def format_filter_hcps(data):
     extra_columns = _extra_columns_for(f, f.get("sort_by", "propensity_score"))
     for r in data["results"]:
         line = (f"  NPI {r['npi']} ({r['specialty']}, {r['state'].title()}) "
-                f"- propensity {_format_cell(r['propensity_score'])}, "
+                f"- propensity {_format_propensity(r['propensity_score'])}, "
                 f"switching {_format_cell(r['switching_score'])}, "
                 f"rx_volume_monthly={_format_cell(r['rx_volume_monthly'])}")
         for col in extra_columns:
@@ -823,7 +843,7 @@ def format_hcp_scripts(data):
     return (f"NPI {data['npi']} ({data['specialty']}, {data['state'].title()}): "
             f"{data['rx_volume_monthly']} GLP-1 scripts last month "
             f"({data['nrx_monthly']} new starts). Tier {data['tier']}, "
-            f"propensity {data['propensity_score']:.2f}.")
+            f"propensity {_format_propensity(data['propensity_score'])}.")
 
 
 # =====================================================================

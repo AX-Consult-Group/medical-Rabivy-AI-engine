@@ -191,7 +191,18 @@ def gt_mean_column(column, **filters):
     # correct raw mean of 0.3548 into 0.4, making the agent's exactly-right
     # answer of 0.355 look like a false FAIL against too-tight a tolerance.
     # UPDATED: no rounding at all now - full precision, caller decides.
-    return {"count": count, "mean": float(sub[column].mean())}
+    mean_val = float(sub[column].mean())
+    if column == "propensity_score":
+        # 2026-08-05: the agent (and the regex router) now DISPLAY
+        # propensity_score as a 0-100 percentage, not the raw 0-1 score
+        # (see agent_tools.py's _trim_row / _aggregate_hcp_stats and
+        # query_spreadsheet.py's _format_propensity) - the ground truth
+        # has to be on the same scale, or a numerically-correct answer
+        # looks like a false FAIL. Still full precision, not rounded -
+        # test_numeric_accuracy.py's exact-match check rounds this to
+        # whatever precision the agent's own answer used.
+        mean_val = mean_val * 100
+    return {"count": count, "mean": mean_val}
 
 def gt_sum_column(column, **filters):
     """Total (sum) of a numeric column among rows matching the given

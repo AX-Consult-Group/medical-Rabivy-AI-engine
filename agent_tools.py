@@ -38,7 +38,18 @@ def _trim_row(row):
     for f in _ROW_FIELDS:
         if f in row:
             v = row[f]
-            if isinstance(v, (np.integer,)):
+            if f == "propensity_score" and isinstance(v, (float, np.floating)):
+                # 2026-08-05: propensity_score is shown to the LLM as a
+                # 0-100 whole-number percentage now, not the raw 0-1
+                # score - matches the HCP snapshot docs' own "X/100"
+                # convention and query_spreadsheet.py's formatters. Found
+                # via a real eval: the agent answered "0.367" for a
+                # propensity question while ground truth (and the docs)
+                # expected "37" - same number, two scales. Filtering/
+                # sorting elsewhere still uses the raw 0-1 dataframe
+                # value - this only changes what's DISPLAYED.
+                v = round(float(v) * 100)
+            elif isinstance(v, (np.integer,)):
                 v = int(v)
             elif isinstance(v, (float, np.floating)):
                 # Round EVERY float (plain Python floats included - pandas
@@ -332,8 +343,15 @@ def _aggregate_hcp_stats(inp):
     column = inp.get("column", "propensity_score")
     if column not in sub.columns:
         return {"error": f"'{column}' is not a real column."}
-    return {"source": "hcp_propensity_table", "count": len(sub),
-            "mean": round(float(sub[column].mean()), 3)}
+    mean_val = float(sub[column].mean())
+    if column == "propensity_score":
+        # Same 0-1 -> 0-100 display scaling as _trim_row above, so an
+        # aggregate propensity answer matches the same convention as a
+        # single-row one instead of contradicting it.
+        mean_val = round(mean_val * 100)
+    else:
+        mean_val = round(mean_val, 3)
+    return {"source": "hcp_propensity_table", "count": len(sub), "mean": mean_val}
 
 
 def _states_summary(inp):
