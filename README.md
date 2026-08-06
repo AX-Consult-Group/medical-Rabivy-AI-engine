@@ -100,26 +100,51 @@ In this project, all of the above is synthetic data generated to look like the r
 
 ```bash
 pip install -r requirements.txt
+```
 
-python main.py                          # build the knowledge base (chunk, tag, embed)
+**1. Build the knowledge base - essential, always run this first.**
 
+```bash
+python main.py
+```
+
+Chunks, tags, and embeds every source document, and builds the propensity/switching scores. Nothing else in this repo works until this has run at least once - it's a one-time build step, not something you run per question.
+
+**2. Get an API key - needed for a real demo.**
+
+```bash
+export ANTHROPIC_API_KEY=...            # Windows: set ANTHROPIC_API_KEY=...
+```
+
+Without a key, the agent falls back to a free, offline stand-in with no real AI in the loop - fine for confirming the plumbing works, not what you want for an actual demo.
+
+**3. Demo it - essential, pick whichever you want to show.**
+
+```bash
+python agent.py                                                                                  # interactive console session - plain terminal, VS Code, wherever
+python agent.py "Who should I target next month in New York, and what should I say to them?"     # one-shot, no session
+python chat_ui.py                                                                                 # the actual rep-facing chat UI, at http://localhost:8017
+```
+
+`agent.py` is the fastest way to just ask it something directly from the console. `chat_ui.py` is the real interface - use that one if you're showing the product itself rather than the underlying logic.
+
+**4. Run the evals - optional, uses API credits.**
+
+```bash
 python test_the_system.py               # test Path A - the regex router (free, no API key)
 python test_the_agent.py                # test Path B - the agent (free in mock mode, no API key needed)
 python test_phrasing_consistency.py     # does rewording a question change the answer? (free in mock mode)
 python test_retrieval_ranking.py        # is the right document chunk ranked #1? (always free, no LLM used)
 python test_numeric_accuracy.py         # is the agent's own maths correct? (needs a live model to mean anything)
-
-export ANTHROPIC_API_KEY=...            # Windows: set ANTHROPIC_API_KEY=...
-python agent.py "Who should I target next month in New York, and what should I say to them?"
-python agent.py                          # interactive session, with conversation memory
-python chat_ui.py                        # web interface at http://localhost:8017
 ```
+
+Not needed to demo the product itself - these check whether it's actually working. `test_retrieval_ranking.py` never touches the LLM at all, so it's always free regardless of whether a key is set.
+
+---
 
 `test_the_agent.py` and `test_phrasing_consistency.py` run in one of two modes automatically, depending on whether a key is set:
 - **Mock mode** (no key) - free, deterministic, checks tool selection and retrieval only - a real, but weaker, signal.
 - **Real mode** (key set) - additionally checks answer quality and the audit verdict, using the real model.
-
-`test_retrieval_ranking.py` never uses the LLM at all (it calls the search engine directly), so it's always free regardless of whether a key is set.
 
 CI (`.github/workflows/eval.yml`) runs the full build plus `test_the_system.py` and `test_the_agent.py`, in mock mode, on every push and pull request - so a change that breaks routing, retrieval, or the agent loop turns the commit red before it reaches anyone. It also runs `challenger_validation.py`'s model-gap digest.
 
