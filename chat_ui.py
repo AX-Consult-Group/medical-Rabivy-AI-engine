@@ -186,6 +186,18 @@ def _gates(result, evidence_view):
         issues = (result.get("verification") or {}).get("issues", [])
         gates.append({"name": "Hallucination audit", "ok": False,
                       "detail": f"FAIL - {len(issues)} unresolved issue(s), see audit detail"})
+    elif verdict == "audit_error":
+        # Reconciled 2026-08-07: this used to fall into the same "else"
+        # branch as not_checked below (ok=None, "Not performed"). That
+        # was wrong - quarantined = verdict in ("fail", "audit_error")
+        # in do_POST() means an audit_error DOES hold the answer back
+        # for a human, exactly like a real fail. Showing it as ok=None
+        # made a genuinely blocked answer look like the audit simply
+        # never ran, hiding a real red case behind an amber label.
+        gates.append({"name": "Hallucination audit", "ok": False,
+                      "detail": "ERROR - the audit call itself failed (not a content "
+                                "finding); treated the same as a failed audit and held "
+                                "for human review"})
     else:
         gates.append({"name": "Hallucination audit", "ok": None,
                       "detail": f"Not performed ({verdict}) - offline mode has no auditor"})
@@ -242,13 +254,25 @@ def _new_query_id():
 
 
 def _log_query(query_id, question, status, result=None, gates=None,
-               evidence_view=None, error=None):
+               evidence_view=None, error=None, preceding_context=None):
     """Writes one line to output/QUERY_LOG/query_log.jsonl for every /ask call,
     no matter how it ends up: delivered straight away, held in
     quarantine, or blown up with a server error. status is one of
     "delivered", "quarantined", or "error" - the same three outcomes
     the browser already shows the user, just persisted this time
-    instead of only ever living in one browser tab."""
+    instead of only ever living in one browser tab.
+
+    preceding_context (added 2026-08-07): a snapshot of _agent.history
+    exactly as it stood BEFORE this question was asked - the same
+    question/answer pairs (agent.py's _trim_history() format, last
+    MAX_HISTORY_TURNS pairs) the model actually had in front of it. A
+    question answered with no fresh tool call (e.g. a legitimate
+    follow-up resolved from conversation memory, per SYSTEM_PROMPT's
+    "Follow-up questions... resolve them from context" rule) used to
+    log as a bare, context-free row - there was no way to tell "this
+    genuinely had nothing to go on" apart from "this correctly reused
+    what came before" without digging through raw timestamps and
+    guessing. Logging the exact context removes the guessing."""
     entry = {
         "query_id": query_id,
         "asked_at": time.strftime("%Y-%m-%d %H:%M:%S"),
@@ -261,6 +285,7 @@ def _log_query(query_id, question, status, result=None, gates=None,
         "audit_trail": (result or {}).get("audit_trail", []) if result else [],
         "evidence": evidence_view or [],
         "error": error,
+        "preceding_context": preceding_context or [],
     }
     _append_jsonl(QUERY_LOG, entry)
 
@@ -686,6 +711,12 @@ class Handler(BaseHTTPRequestHandler):
             if not question:
                 raise ValueError("empty question")
             with _agent_lock:
+                # Snapshot BEFORE ask() - this is exactly what the model
+                # had in front of it going into this turn (agent.py's
+                # trimmed question/answer pairs), not an approximation
+                # reconstructed later from timestamps. See _log_query()
+                # for why this gets captured at all.
+                prior_history = list(_agent.history)
                 result = _agent.ask(question)
             ev = _evidence_view(result["evidence"])
             gates = _gates(result, ev)
@@ -696,7 +727,8 @@ class Handler(BaseHTTPRequestHandler):
             # but clearly labeled by its gate.
             quarantined = verdict in ("fail", "audit_error")
             _log_query(query_id, question, "quarantined" if quarantined else "delivered",
-                       result=result, gates=gates, evidence_view=ev)
+                       result=result, gates=gates, evidence_view=ev,
+                       preceding_context=prior_history)
             # is_decline travels with the answer so the browser's RLHF
             # widget can ask a DIFFERENT, more intuitive question when the
             # system declined - see rlhfHtml()/wireRlhf() below. Computed

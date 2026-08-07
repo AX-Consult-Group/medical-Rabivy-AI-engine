@@ -347,14 +347,21 @@ def _golden_trend(series):
 QUERY_LOG_PATH = os.path.join("output", "QUERY_LOG", "query_log.jsonl")
 RLHF_LOG_PATH = os.path.join("output", "RLHF_FEEDBACK", "rlhf_log.jsonl")
 
-# Each gate's OWN failure severity, per the live-query decision tree
-# Figma diagram - these are NOT uniform. A missed tool call or a
-# low-confidence retrieval is a lower-stakes amber; an answer with no
-# source citation, or one that fails the hallucination audit, is red.
+# Each gate's OWN failure severity - these are NOT uniform, but only ONE
+# of them is actually red. Reconciled 2026-08-07: "Source citations"
+# used to be red here, but chat_ui.py's real quarantine rule
+# (quarantined = verdict in ("fail", "audit_error")) never once
+# consults this gate - only the Hallucination audit's own verdict blocks
+# an answer. A missing citation is common and often legitimate on a
+# follow-up question that's correctly answering from conversation
+# memory rather than a fresh tool call (see agent.py's SYSTEM_PROMPT:
+# follow-ups are meant to resolve from context). Coloring that red
+# claimed a severity this gate was never actually enforcing, and could
+# make a perfectly fine follow-up look like it needed urgent review.
 _GATE_FAIL_COLOR = {
     "Tool grounding": "amber",
     "Retrieval confidence": "amber",
-    "Source citations": "red",
+    "Source citations": "amber",
     "Hallucination audit": "red",
 }
 _COLOR_RANK = {"green": 0, "amber": 1, "red": 2}
@@ -497,6 +504,11 @@ def _live_rows():
             "reviewed": reviewed,
             "leaf": leaf, "color": color,
             "rlhf": rlhf_detail,
+            # Added 2026-08-07 alongside chat_ui.py's preceding_context
+            # logging - rows written before that change simply won't have
+            # this key, so .get() with a [] default rather than assuming
+            # it's always present.
+            "preceding_context": q.get("preceding_context") or [],
         })
     rows.reverse()  # newest query first
     for i, r in enumerate(rows, start=1):
@@ -800,7 +812,11 @@ _LIVE_TREE_BOXES = {
 
     "cite_pass": dict(x=872,  y=340, w=190, h=110, kind="green", leaf=True, title="Cited",
                        sub="Answer includes at least one source citation"),
-    "cite_fail": dict(x=1078, y=340, w=190, h=110, kind="red", leaf=True, title="Not cited",
+    # Amber, not red - matches _GATE_FAIL_COLOR (2026-08-07): missing a
+    # citation doesn't block the answer, and is often a legitimate
+    # follow-up answering from conversation memory rather than a fresh
+    # tool call, not a confirmed problem the way a hallucination is.
+    "cite_fail": dict(x=1078, y=340, w=190, h=110, kind="amber", leaf=True, title="Not cited",
                        sub="No inline citation found in the answer"),
 
     "audit_pass":      dict(x=1308, y=340, w=190, h=110, kind="green", leaf=True, title="Passed",
@@ -821,8 +837,10 @@ _LIVE_TREE_CONNECTORS = [
 
 _LIVE_TREE_LEGEND_ROWS = [
     ("green", "Gate passed. No action needed."),
-    ("amber", "Lower-severity miss, or not checked at all (offline mode). Worth a look."),
-    ("red", "Higher-severity miss - no citation, or a confirmed hallucination. Review now."),
+    ("amber", "No tool called, low retrieval confidence, no citation, or not checked at all "
+              "(offline mode) - worth a look, not yet a confirmed problem."),
+    ("red", "Confirmed hallucination - the answer is held back from the rep until a human "
+            "reviews it. Review now."),
 ]
 
 
@@ -1361,6 +1379,69 @@ function chip(leaf, color){
 function dot(ok){ return ok ? '<span class="ok">&#10003;</span>' : '<span class="no">&#10007;</span>'; }
 function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
 
+// Light markdown rendering for answer text - the agent writes **bold**,
+// blank-line paragraph breaks, and "- " bullet lists (see agent.py's
+// SYSTEM_PROMPT), which used to show up on the dashboard as literal
+// asterisks and one unbroken block of text. Escapes first (same esc()
+// used everywhere else) so this stays just as safe, THEN turns the
+// escaped-but-still-plain markup into real HTML. Deliberately small -
+// bold, paragraphs, bullets - not a full markdown parser.
+function mdToHtml(s){
+  if (!s) return '';
+  // NOTE: this whole page is a Python string.Template, which treats
+  // any dollar sign in this text as the start of ITS OWN placeholder
+  // syntax and throws "Invalid placeholder" on substitute() otherwise.
+  // A doubled dollar sign is Template's own escape for one literal
+  // dollar sign - needed below for JS's regex capture-group reference,
+  // and again further down for a regex end-of-line anchor.
+  var t = esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$$1</strong>');
+  var blocks = t.split(/\\n\s*\\n/);
+  return blocks.map(function(block){
+    // Line-by-line within the block, not "the whole block is a list or
+    // it isn't" - a real answer often has a label line immediately
+    // followed by bullets with no blank line between them ("Key
+    // takeaways:" then "- ..." lines, per SYSTEM_PROMPT), and that
+    // label line needs to stay its own line, not get folded into the list.
+    var lines = block.split('\\n').filter(function(l){ return l.trim() !== ''; });
+    var html = '', listBuf = [], textBuf = [];
+    function flushList(){
+      if (listBuf.length) { html += '<ul>' + listBuf.map(function(x){ return '<li>'+x+'</li>'; }).join('') + '</ul>'; listBuf = []; }
+    }
+    function flushText(){
+      if (textBuf.length) { html += '<p>' + textBuf.join('<br>') + '</p>'; textBuf = []; }
+    }
+    lines.forEach(function(l){
+      var m = /^\s*-\s+(.*)$$/.exec(l);
+      if (m) { flushText(); listBuf.push(m[1]); }
+      else { flushList(); textBuf.push(l); }
+    });
+    flushList(); flushText();
+    return html;
+  }).join('');
+}
+
+// Shared accordion state for all three tabs' item-detail panels (golden
+// toggle(), live toggleLive(), rlhf toggleRlhf()) - only one item open
+// at a time, and clicking anywhere outside the open panel (and outside
+// any row, so a click that opens a DIFFERENT item isn't immediately
+// undone) closes it.
+let openDetailEl = null;
+function _toggleDetail(el){
+  if (openDetailEl && openDetailEl !== el) {
+    openDetailEl.style.display = 'none';
+  }
+  const show = el.style.display !== 'block';
+  el.style.display = show ? 'block' : 'none';
+  openDetailEl = show ? el : null;
+}
+document.addEventListener('click', function(e){
+  if (!openDetailEl) return;
+  if (openDetailEl.contains(e.target)) return;
+  if (e.target.closest && e.target.closest('.row')) return;
+  openDetailEl.style.display = 'none';
+  openDetailEl = null;
+});
+
 function retrievalHTML(ret){
   // Layer 2 body, in whichever of the four shapes _retrieval_detail()
   // produced - every question type gets something here now.
@@ -1393,8 +1474,8 @@ function detailHTML(r,i){
     '<div class="dsection"><p class="dlabel">Diagnosis</p><p class="dtext">'+chip(r.leaf,r.color)+' &mdash; '+esc(diagDesc(r.leaf))+'</p></div>'+
     '<div class="dsection"><p class="dlabel">Layer 1 &mdash; routed to</p><p class="dtext">'+esc(r.routed_to)+'</p></div>'+
     '<div class="dsection"><p class="dlabel">Layer 2 &mdash; '+(r.qtype==='narrative' ? 'chunks retrieved' : 'filters / rule applied')+'</p>'+retrievalHTML(r.retrieval)+'</div>'+
-    '<div class="dsection"><p class="dlabel">Layer 3 &mdash; expected answer</p><p class="quote">'+esc(r.expected || '(no single checkable value for this question)')+'</p></div>'+
-    '<div class="dsection"><p class="dlabel">Layer 3 &mdash; actual answer</p><p class="quote">'+esc(r.answer)+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Layer 3 &mdash; expected answer</p><div class="quote">'+mdToHtml(r.expected || '(no single checkable value for this question)')+'</div></div>'+
+    '<div class="dsection"><p class="dlabel">Layer 3 &mdash; actual answer</p><div class="quote">'+mdToHtml(r.answer)+'</div></div>'+
   '</div>';
 }
 
@@ -1441,12 +1522,46 @@ function liveDetailHTML(r,i){
     ? '<div class="dsection"><p class="dlabel">RLHF</p><p class="dtext">A rep has reviewed this one. '
       +'<button class="linkbtn" onclick="event.stopPropagation();jumpToRlhf(\\''+esc(r.query_id)+'\\')">View in RLHF feedback tab &rarr;</button></p></div>'
     : '<div class="dsection"><p class="dlabel">RLHF</p><p class="dtext">Not yet reviewed by a rep.</p></div>';
+  // Added 2026-08-07: shows exactly what the model had in memory BEFORE
+  // this question - the same trimmed question/answer pairs chat_ui.py
+  // snapshots at ask-time (see agent.py's _trim_history()). This is what
+  // makes an Amber row from a no-new-tool-call follow-up checkable: a
+  // reviewer can see whether it genuinely had nothing to go on, or
+  // correctly reused real evidence from a turn or two back, instead of
+  // having to guess from timestamps alone.
+  var contextNote;
+  if (!r.preceding_context || r.preceding_context.length === 0) {
+    contextNote = '<div class="dsection"><p class="dlabel">Conversation context</p>'
+      +'<p class="dtext">No prior context - this was the first question of the session '
+      +'(or logged before this field existed).</p></div>';
+  } else {
+    // preceding_context is always strict user/assistant pairs (agent.py's
+    // _trim_history() only ever stores whole Q&A turns) - step through two
+    // at a time so each prior QUESTION is its own line and its ANSWER is
+    // collapsed behind a click, instead of one long unbroken block of text.
+    var pairs = [];
+    for (var t = 0; t < r.preceding_context.length; t += 2) {
+      pairs.push([r.preceding_context[t], r.preceding_context[t + 1]]);
+    }
+    var turns = pairs.map(function(pair, t){
+      var q = pair[0] ? pair[0].content : '';
+      var a = pair[1] ? pair[1].content : '(no answer recorded)';
+      var cid = 'ctx' + i + '_' + t;
+      return '<div class="ctxturn">'
+        +'<p class="dtext ctxq">Q'+(t+1)+': '+esc(q)+'</p>'
+        +'<button class="linkbtn ctxtoggle" onclick="event.stopPropagation();toggleCtxTurn(\\''+cid+'\\')">Show answer &#9656;</button>'
+        +'<div class="dtext quote ctxa" id="'+cid+'" style="display:none;">'+mdToHtml(a)+'</div>'
+        +'</div>';
+    }).join('');
+    contextNote = '<div class="dsection"><p class="dlabel">Conversation context before this question</p>'+turns+'</div>';
+  }
   return '<div class="detail" id="ld'+i+'">'+
     '<div class="dsection"><p class="dlabel">Status</p><p class="dtext"><span class="chip '+(r.status_color||'na')+'">'+esc(r.status)+'</span></p></div>'+
     '<div class="dsection"><p class="dlabel">Asked</p><p class="dtext">'+esc(r.asked_at || '')+'</p></div>'+
     gateRows +
     reviewNote +
-    '<div class="dsection"><p class="dlabel">Answer</p><p class="quote">'+esc(r.answer)+'</p></div>'+
+    contextNote +
+    '<div class="dsection"><p class="dlabel">Answer</p><div class="quote">'+mdToHtml(r.answer)+'</div></div>'+
   '</div>';
 }
 
@@ -1483,8 +1598,19 @@ function renderLive(){
 }
 
 function toggleLive(i){
-  const el = document.getElementById('ld'+i);
-  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+  _toggleDetail(document.getElementById('ld'+i));
+}
+
+// One prior turn's answer inside the "Conversation context" section -
+// collapsed by default so a multi-turn history reads as a list of
+// questions, not a wall of text; click a question's button to expand
+// just that answer. Flips the button's own label/arrow to match.
+function toggleCtxTurn(id){
+  const el = document.getElementById(id);
+  const show = el.style.display === 'none';
+  el.style.display = show ? '' : 'none';
+  const btn = el.previousElementSibling;
+  if (btn) btn.innerHTML = show ? 'Hide answer &#9662;' : 'Show answer &#9656;';
 }
 
 // Jumps from a reviewed Live Queries row straight to its entry in the
@@ -1548,9 +1674,9 @@ function rlhfDetailHTML(r,i){
     '<div class="dsection"><p class="dlabel">Rep review</p><p class="dtext">Rating: <strong>'+esc(rl.rating || '-')+'</strong>'+
       (rl.evidence_answer ? ' &middot; Right evidence used: <strong>'+esc(rl.evidence_answer)+'</strong>' : '')+'</p>'+
       (rl.confirmed_chunk_id ? '<p class="dtext">Confirmed chunk: '+esc(rl.confirmed_chunk_id)+' (rank '+esc(String(rl.confirmed_chunk_rank))+')</p>' : '')+
-      (rl.note ? '<p class="quote">'+esc(rl.note)+'</p>' : '')+
+      (rl.note ? '<div class="quote">'+mdToHtml(rl.note)+'</div>' : '')+
     '</div>'+
-    '<div class="dsection"><p class="dlabel">Answer</p><p class="quote">'+esc(r.answer)+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Answer</p><div class="quote">'+mdToHtml(r.answer)+'</div></div>'+
   '</div>';
 }
 function renderRlhf(){
@@ -1574,8 +1700,7 @@ function renderRlhf(){
   document.getElementById('rlhf-footnote').textContent = rows.length + ' of ' + reviewedRows.length + ' reviewed queries shown.';
 }
 function toggleRlhf(i){
-  const el = document.getElementById('rd'+i);
-  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+  _toggleDetail(document.getElementById('rd'+i));
 }
 
 function render(){
@@ -1608,8 +1733,7 @@ function render(){
 }
 
 function toggle(i){
-  const el = document.getElementById('d'+i);
-  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+  _toggleDetail(document.getElementById('d'+i));
 }
 
 render();
