@@ -60,15 +60,6 @@ jobs:
           python challenger_validation.py > /dev/null
           python challenger_validation.py --digest >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Roll up eval history for the trend dashboard
-        # Reads every JSON snapshot in eval_runs/ (including the ones
-        # this run just produced) and writes eval_runs/eval_history.json.
-        # if: always() so a run where the golden-set gate FAILED still
-        # gets its data point in the trend - that failure is exactly
-        # what the dashboard needs to show, not hide.
-        if: always()
-        run: python build_eval_history.py
-
       - name: Keep eval history + model gap report as build artifacts
         if: always()
         uses: actions/upload-artifact@v4
