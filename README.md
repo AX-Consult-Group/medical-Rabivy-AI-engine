@@ -21,17 +21,15 @@ For a full walkthrough of how this whole system is tested - the golden question 
 
 ## The full pipeline, visually
 
-![Graphic breakdown of the full AI engine pipeline](figures/rabivy_layered_schematic_V4.svg)
+![Graphic breakdown of the full AI engine pipeline](figures/rabivy_layered_schematic_technical.svg)
 
 Every file below is arranged in layers - each layer only ever talks to the layer directly above or below it. Read top to bottom.
-
-*(Note: the schematic above reflects the architecture as of the last diagram update - the evaluation layer described below has since grown further (a shared ground-truth module plus a second, article-specific eval track); the diagram itself hasn't been redrawn to match yet.)*
 
 ---
 
 ## Layer by layer
 
-**Layer 1 - turns raw documents into searchable pieces.** Three scripts run once, in order, to prepare the knowledge base: `1_chunk_documents.py` splits every source document into small, labeled pieces (one chunk per section or HCP card); `2_tag_chunks.py` adds extra labels to the chunks so they are easily traceable; `3_create_embeddings.py` converts each piece into a vector of numbers that captures its meaning, so the system can search by meaning, not just keywords.
+**Layer 1 - turns raw documents into searchable pieces.** Three scripts run once, in order, to prepare the knowledge base: `1_chunk_documents.py` splits every source document in the `docs/` folder into small, labeled pieces (one chunk per section or HCP card); `2_tag_chunks.py` adds extra labels to the chunks so they are easily traceable; `3_create_embeddings.py` converts each piece into a vector of numbers that captures its meaning, so the system can search by meaning, not just keywords.
 
 **Layer 2 - the orchestrator.** `main.py` runs all three Layer 1 steps in the correct order, checking after each one that it actually worked before moving on. This is the one file to run to rebuild the knowledge base from scratch.
 
@@ -47,7 +45,7 @@ In this project, all of the above is synthetic data generated to look like the r
 **Layer 4 - the two engines.** `query_spreadsheet.py` is the structured query engine - it answers ranking, counting, and filtering questions by looking directly at the spreadsheet. `search_documents.py` is the document search engine - it finds the most relevant chunks for a narrative question, using whichever embedding model built the store (see `embedding_backend.py` below).
 
 **Layer 5 - the two paths that actually ask a question.** This is where the two approaches diverge, both sitting on the exact same Layer 4 engines underneath:
-- **Path A, the regex router:** `ask_a_question.py` reads a question with keyword/regex rules, decides which engine(s) it needs, calls them, and returns the raw answer - no real understanding, just pattern matching. `debugger_agent.py` is not part of this live path - it's a standalone stress-testing tool from earlier iterations, used to synthesize narrative-style answers over Path A's retrieved data via a small, free API (Groq), specifically to exercise the regex router's narrative-answer cases under something closer to real conditions before Path B (the agent) existed to do that job properly.
+- **Path A, the regex router:** `ask_a_question.py` reads a question with keyword/regex rules, decides which engine(s) it needs, calls them, and returns the raw answer - no real understanding, just pattern matching.
 - **Path B, the agent:** `agent_tools.py` is the bridge that turns a tool call the agent picks into a real call on the two engines above. Includes `aggregate_hcp_stats`, a dedicated tool that computes a true average, percentage, sum, or difference directly over every matching row - added after testing found the agent either guessing from a capped 25-row sample, or correctly refusing to answer, whenever a question asked for a statistic across a larger group than that.
 
 **Layer 5 (evaluation) - does either path actually work?** Rebuilt this cycle around a single 30-question golden set, checked on **three separate layers** per question rather than one pass/fail: did it route to the right engine, did it apply the right rules/filters to get there, and does the answer match reality - computed **live** against the actual spreadsheet each run, so a data refresh moves the expected answer automatically instead of a test going stale.
@@ -65,9 +63,15 @@ In this project, all of the above is synthetic data generated to look like the r
 
 **Layer 6 - the agent's brain.** `llm_client.py` is the actual interface to Claude - `agent.py` calls it twice per question, once to pick a tool, once to write the final answer. Uses the real API if a key is set, otherwise a free, offline stand-in with no AI at all, for zero-cost testing. `agent.py` itself is the orchestrator: it runs the tool-selection loop, writes the answer, then runs a separate audit pass checking its own answer against the evidence before returning it, revising once if the audit fails.
 
-**Layer 7 - what a rep actually opens.** `chat_ui.py` is a local web interface showing the answer plus the tool trace and audit verdict alongside it, so nothing is a black box.
+**Layer 7 - what a rep actually opens.** `chat_ui.py` is a local web interface (`localhost:8017`) showing the answer plus pass/fail gates and a human review queue for failures, so nothing is a black box. It's local only - it runs on whichever machine starts it, not a shared server.
 
-**Standalone - real, but not part of either path above.** `propensity_model.py` encodes the scoring formula as runnable code; `main.py` runs it automatically before building anything (Stage 0), so a stale or wrong score gets caught immediately rather than silently flowing downstream. `challenger_validation.py` checks `propensity_model.py`'s scores against real (or simulated) outcomes, and separately trains its own data-driven model to flag patterns the hand-built scorecard might be missing. `distill_router.py` is an experiment: it looks at the agent's own past tool-choice decisions and tries writing free regex rules that would reproduce them, promoting a rule only if it's 100% correct on every past match - not wired into `chat_ui.py` yet. `intel_digest.py` is a separate loop entirely: turns a batch of incoming external signals (conference abstracts, publications, regulatory readouts, payer/market news) into a ranked, email-ready briefing, then ingests the items into the knowledge repository so the conversational agent can answer questions about them afterwards - feed, triage, digest, ingest.
+**Layer 8 - logging every question and collecting an RLHF rating.** The same `chat_ui.py` logs every real question and answer it handles, and puts a widget under each delivered answer asking the rep whether it was right. This is log-and-display only - nothing here retrains or fine-tunes any model; it's the raw material a future rating/training loop would need, not that loop itself.
+
+**Layer 9 - turning all of that into one dashboard.** `build_dashboard.py` reads the golden-set results in `eval_runs/` (Layer 5) plus the live query/RLHF logs (Layer 8), and writes one page, `dashboard.html`, with three tabs: golden-set results, every live question, and every rep rating.
+
+**Standalone - real, but not part of either path above.** `propensity_model.py` encodes the scoring formula as runnable code; `main.py` runs it automatically before building anything (Stage 0), so a stale or wrong score gets caught immediately rather than silently flowing downstream. `challenger_validation.py` checks `propensity_model.py`'s scores against real (or simulated) outcomes, and separately trains its own data-driven model to flag patterns the hand-built scorecard might be missing. `intel_digest.py` is a separate loop entirely: turns a batch of incoming external signals (conference abstracts, publications, regulatory readouts, payer/market news) into a ranked, email-ready briefing, then ingests the items into the knowledge repository so the conversational agent can answer questions about them afterwards - feed, triage, digest, ingest.
+
+Alongside the code, four rendered write-ups are published via GitHub Pages: the [Project Write-Up](https://ax-consult-group.github.io/medical-Rabivy-AI-engine/index.html) (`index.html`) and [Evaluation Suite](https://ax-consult-group.github.io/medical-Rabivy-AI-engine/evals.html) (`evals.html`) linked above, plus `maintenance_dashboard.html` and `live_queries_&_RLHF.html`, covering the dashboard and the live-query/RLHF system respectively. All four are rendered separately and copied in - not built by any script in this repo.
 
 ---
 
@@ -75,6 +79,7 @@ In this project, all of the above is synthetic data generated to look like the r
 
 | File | Layer | What it does |
 |---|---|---|
+| `docs/` folder | 1 (input) | Raw narrative source documents that `1_chunk_documents.py` splits up |
 | `1_chunk_documents.py` | 1 | Splits source documents into small, labeled, searchable pieces |
 | `2_tag_chunks.py` | 1 | Adds competitor/brand tags to each piece |
 | `3_create_embeddings.py` | 1 | Converts each piece into a vector for meaning-based search |
@@ -84,7 +89,6 @@ In this project, all of the above is synthetic data generated to look like the r
 | `query_spreadsheet.py` | 4 | Structured engine - ranking, counting, filtering |
 | `search_documents.py` | 4 | Document engine - meaning-based search over chunks |
 | `ask_a_question.py` | 5 (Path A) | Regex router - no AI, keyword matching only |
-| `debugger_agent.py` | 5 (Path A) | Standalone stress-test tool from earlier iterations - synthesized narrative answers over Path A via a free API (Groq), not part of the live path |
 | `agent_tools.py` | 5 (Path B) | Bridges the agent's tool calls to the two real engines, incl. `aggregate_hcp_stats` |
 | `ground_truth.py` | 5 (eval) | Shared live-answer computation + verified narrative facts, used by every eval file below |
 | `test_the_system.py` | 5 (eval) | Runs the 30 golden questions through Path A, 3-layer scoring |
@@ -95,15 +99,25 @@ In this project, all of the above is synthetic data generated to look like the r
 | `article_ground_truth.py` | 5 (eval, articles) | Live-lookup ground truth for real published papers, incl. a deliberate cross-document trap |
 | `test_article_retrieval.py` | 5 (eval, articles) | Checks real-paper chunk ranking against the full corpus, not a pre-filtered subset |
 | `test_the_articles.py` | 5 (eval, articles) | Runs the real-paper questions through the real agent, 3-layer scoring, pretraining-recall flagging |
+| `eval_runs/` folder | 5 (eval output) | One JSON snapshot per eval run; read by `build_dashboard.py` for the trend/golden-set tabs |
 | `llm_client.py` | 6 | The real interface to Claude (or a free offline stand-in) |
 | `agent.py` | 6 | Orchestrator - tool loop, answer synthesis, self-audit |
-| `chat_ui.py` | 7 | Local web interface showing the answer plus its evidence |
+| `chat_ui.py` | 7, 8 | Local web interface showing the answer plus its evidence (7); logs every question/answer and collects a rep RLHF rating on each one (8) |
+| `build_dashboard.py` | 9 | Reads `eval_runs/` + the live query/RLHF logs, writes `dashboard.html` |
+| `dashboard.html` | 9 (output) | Generated by `build_dashboard.py` - golden-set trend, live queries, and RLHF ratings in one page |
 | `embedding_backend.py` | standalone | Shared fallback so build and query never use mismatched embedding models |
 | `propensity_model.py` | standalone | The scoring formula as code; guards `main.py` against stale scores |
 | `challenger_validation.py` | standalone | Checks the scorecard against real outcomes and a learned model |
-| `distill_router.py` | standalone | Experiment: turns the agent's own past decisions into free regex rules |
 | `intel_digest.py` | standalone | Competitive intelligence loop - feed, triage, digest, ingest |
-| `build_dashboard.py` | standalone | Reads `eval_runs/` + the live query/RLHF logs, writes the maintenance dashboard (`dashboard.html`) |
+| `index.html` | standalone (docs) | Rendered Project Write-Up, published via GitHub Pages |
+| `evals.html` | standalone (docs) | Rendered Evaluation Suite write-up, published via GitHub Pages |
+| `maintenance_dashboard.html` | standalone (docs) | Rendered write-up on the maintenance dashboard, published via GitHub Pages |
+| `live_queries_&_RLHF.html` | standalone (docs) | Rendered write-up on the live query + RLHF logging system, published via GitHub Pages |
+| `PROJECT_BRIEF.md` | standalone (docs) | Original project scope doc this build was scoped against |
+| `requirements.txt` | standalone (meta) | Python dependency list (`pip install -r requirements.txt`) |
+| `figures/` folder | standalone (meta) | Diagram source files, incl. the pipeline schematic above |
+| `.github/workflows/eval.yml` | standalone (CI) | Runs the build + golden-set gate + model-gap digest on every push/PR |
+| `.github/workflows/intel_digest.yml` | standalone (CI) | Scheduled weekly competitive-intelligence digest run |
 
 ---
 
@@ -174,7 +188,6 @@ CI (`.github/workflows/eval.yml`) runs the full build plus `test_the_system.py` 
 ## Current status / known limitations
 
 - **The embedding model sometimes misses the right chunk, or ranks a worse one above it.** Confirmed directly by `test_retrieval_ranking.py` against the real embedding model: 4 of 10 narrative questions didn't rank their correct chunk first, and one didn't retrieve it at all even with a well-formed query. This is a genuine limitation of the embedding model itself (`all-MiniLM-L6-v2`), not a routing or prompting problem - the real fix (hybrid keyword + semantic search) is a larger piece of work, deliberately not undertaken for this showcase.
-- **`distill_router.py` is a real experiment, not live** - it isn't wired into `chat_ui.py`, so it doesn't affect what a rep actually sees today.
 - Both Path A and Path B sit on the same Layer 4 engines - a change to those engines affects both, so both are kept in sync deliberately, not by accident.
 
 ---
