@@ -22,9 +22,21 @@
 
 import json
 import os
+import random
 import re
+import time
 
 DEFAULT_MODEL = os.environ.get("AGENT_MODEL", "claude-sonnet-4-5")
+# 2026-08-04: retry/fallback settings. Added because a single timeout on
+# the hallucination auditor's LLM call (agent.py's _verify()) was landing
+# as verdict="audit_error" - which chat_ui.py quarantines exactly like a
+# real hallucination. That made "red" noisy: a dropped connection looked
+# identical to a genuine failed audit. Fix belongs here, not in agent.py,
+# since retries are a concern of talking to the API, not of what the
+# audit logic does with the answer.
+FALLBACK_MODEL = os.environ.get("AGENT_FALLBACK_MODEL", "claude-haiku-4-5")
+PRIMARY_RETRIES = 2       # attempts on the primary model before falling back
+RETRY_BASE_DELAY = 1.0    # seconds; doubles each retry, plus jitter
 
 
 # =====================================================================
@@ -34,24 +46,49 @@ DEFAULT_MODEL = os.environ.get("AGENT_MODEL", "claude-sonnet-4-5")
 class AnthropicLLM:
     name = "anthropic"
 
-    def __init__(self, model=DEFAULT_MODEL):
+    def __init__(self, model=DEFAULT_MODEL, fallback_model=FALLBACK_MODEL):
         import anthropic  # deferred so mock mode needs no SDK installed
         self.model = model
+        self.fallback_model = fallback_model
         self._client = anthropic.Anthropic()  # reads ANTHROPIC_API_KEY
 
     def complete(self, system, messages, tools=None, max_tokens=2000,
                  temperature=None):
-        kwargs = dict(model=self.model, system=system, messages=messages,
-                      max_tokens=max_tokens)
+        kwargs = dict(system=system, messages=messages, max_tokens=max_tokens)
         if tools:
             kwargs["tools"] = tools
         if temperature is not None:
             kwargs["temperature"] = temperature
-        resp = self._client.messages.create(**kwargs)
-        return {
-            "stop_reason": resp.stop_reason,
-            "content": [b.model_dump() for b in resp.content],
-        }
+        return self._call_with_retries(kwargs)
+
+    def _call_with_retries(self, kwargs):
+        """Tries the primary model up to PRIMARY_RETRIES times (short
+        backoff + jitter between attempts, for transient timeouts/rate
+        limits), then falls back to a second model once before finally
+        raising. Only a failure that survives all of that reaches the
+        caller - so agent.py's _verify() only ever sees verdict="audit_error"
+        for a genuinely broken call, not a single dropped connection."""
+        last_err = None
+        models_to_try = [self.model]
+        if self.fallback_model and self.fallback_model != self.model:
+            models_to_try.append(self.fallback_model)
+
+        for model in models_to_try:
+            attempts = PRIMARY_RETRIES if model == self.model else 1
+            for attempt in range(attempts):
+                try:
+                    resp = self._client.messages.create(model=model, **kwargs)
+                    return {
+                        "stop_reason": resp.stop_reason,
+                        "content": [b.model_dump() for b in resp.content],
+                    }
+                except Exception as e:
+                    last_err = e
+                    on_last_attempt_for_this_model = attempt == attempts - 1
+                    if not on_last_attempt_for_this_model:
+                        delay = RETRY_BASE_DELAY * (2 ** attempt) + random.uniform(0, 0.5)
+                        time.sleep(delay)
+        raise last_err
 
 
 # =====================================================================
@@ -158,7 +195,7 @@ class MockLLM:
             plan.append(("lookup_hcp", {"npi": npi_m.group(1)}))
             if re.search(r"\b(compare|typical|benchmark|average|versus|vs\.?)\b", ql):
                 plan.append(("search_documents",
-                             {"query": "typical specialty benchmark profile", "top_k": 2}))
+                             {"query": "typical specialty benchmark profile", "top_k": 5}))
             return plan
 
         # Counting questions.
@@ -287,11 +324,15 @@ class MockLLM:
             if multi_part:
                 plan.append(("search_documents",
                              {"query": "recommended messaging talking points by segment",
-                              "top_k": 3}))
+                              "top_k": 5}))
             return plan
 
-        # Default: narrative document search.
-        return [("search_documents", {"query": question, "top_k": 4})]
+        # Default: narrative document search. top_k matches
+        # agent_tools.py's own default (5, changed from 4 on 2026-08-04)
+        # so mock mode's plan mirrors what a real call would do when it
+        # doesn't override top_k itself - previously these were three
+        # different hardcoded numbers (2/3/4) with no shared reasoning.
+        return [("search_documents", {"query": question, "top_k": 5})]
 
     # ---- answer assembly ----------------------------------------------
     def _final_answer(self, question, messages):

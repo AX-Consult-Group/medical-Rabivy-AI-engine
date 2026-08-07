@@ -16,6 +16,43 @@
 #                evidence, and releases or rejects the answer
 #                explicitly. Decisions are logged to
 #                output/review_log.jsonl as the governance trail.
+#   QUERY LOG  - every single call to /ask writes one line to
+#                output/QUERY_LOG/query_log.jsonl: the question, the
+#                answer, every gate result, the full audit trail, and
+#                the trimmed evidence - whether the answer was
+#                delivered, quarantined, or the request errored out.
+#                Nothing that comes in is allowed to go un-logged.
+#                Each entry gets a query_id, which is how an RLHF
+#                rating (below) is tied back to the exact query it's
+#                rating.
+#   RLHF       - under every answer the user actually sees (delivered,
+#                or a quarantined answer once a reviewer releases it):
+#                first "was this correct?" (correct / partially correct
+#                / incorrect / vague - didn't really answer), then one
+#                follow-up - "was the right info actually in the
+#                evidence shown?" (yes / no / I don't know). Combined
+#                with whether the answer's OWN WORDING reads as a
+#                decline (_is_decline, imported from build_dashboard.py
+#                - the exact same check the golden test set tree uses),
+#                this reconstructs which of the golden tree's 6 leaves
+#                (Correct answer / Synthesis issue / Correct anyway /
+#                Correctly rejected / Retrieval fail / Hallucination) -
+#                or the two extra live-only outcomes, "Vague / non-
+#                answer" and "flagged, evidence unconfirmed" - this
+#                answer most likely belongs to, from a rep's own
+#                judgement, without needing ground truth. See
+#                _rlhf_leaf() below for the exact mapping.
+#                Every rating writes ONE self-contained line to
+#                output/RLHF_FEEDBACK/rlhf_log.jsonl - the full answer,
+#                gates, evidence trace and audit trail are copied in
+#                alongside the rating (not just a query_id pointer), so
+#                one record has everything needed to understand the
+#                judgement without cross-referencing the query log.
+#
+#   All three logs (query, RLHF, human review) live under output/ in
+#   their own clearly named ALL-CAPS subfolder - output/QUERY_LOG/,
+#   output/RLHF_FEEDBACK/, output/HUMAN_REVIEW/ - rather than as loose
+#   files, so output/ stays scannable as it grows.
 #
 #   python chat_ui.py          -> open http://localhost:8017
 #
@@ -29,12 +66,21 @@ import os
 import re
 import threading
 import time
+import uuid
 import webbrowser
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 from agent import RabivyAgent
+# Reused, not reimplemented - the golden test set tree's own "does this
+# answer's wording read as a decline" check, so live feedback and
+# golden results agree on what a decline even means. build_dashboard.py
+# only imports json/os/re/string, so this doesn't pull in anything
+# heavy.
+from build_dashboard import _is_decline
 
-REVIEW_LOG = os.path.join("output", "review_log.jsonl")
+REVIEW_LOG = os.path.join("output", "HUMAN_REVIEW", "review_log.jsonl")
+QUERY_LOG = os.path.join("output", "QUERY_LOG", "query_log.jsonl")
+RLHF_LOG = os.path.join("output", "RLHF_FEEDBACK", "rlhf_log.jsonl")
 
 PORT = 8017
 
@@ -46,7 +92,21 @@ _CITE = re.compile(r"\[hcp_table\]|\[doc:\s*[^\]]+\]")
 
 def _evidence_view(evidence):
     """Trim tool results for the browser: enough to inspect, not the
-    full corpus. Structure is preserved; long text is clipped."""
+    full corpus. Structure is preserved; long text is clipped.
+
+    2026-08-05: the 500-char clip on chunk text used to cut off most
+    real chunks - checked against output/chunks_tagged.json directly,
+    the median chunk is ~1,760 chars and the longest is 3,492, so 500
+    was throwing away the majority of almost every chunk shown here.
+    Raised to 4000 (comfortably above the real max) so this is
+    effectively "don't truncate" in practice, with the CSS giving the
+    display box a scrollable max-height instead so the page doesn't
+    balloon. IMPORTANT: this ONLY affects what's shown in the browser -
+    the agent already received the full chunk text when it answered
+    (agent_tools.py hands the whole thing to the LLM); this function
+    runs AFTER that call, purely for the human-facing trace view. So
+    raising this costs nothing extra in tokens or API spend.
+    """
     out = []
     for ev in evidence:
         res = ev.get("result", {})
@@ -61,7 +121,7 @@ def _evidence_view(evidence):
             view["low_confidence"] = bool(res.get("low_confidence"))
             view["sections"] = [
                 {"chunk_id": s["chunk_id"], "similarity": s.get("similarity"),
-                 "text": (s.get("text") or "")[:500]}
+                 "text": (s.get("text") or "")[:4000]}
                 for s in res["sections"]
             ]
         elif "row" in res:
@@ -70,7 +130,7 @@ def _evidence_view(evidence):
             if "snapshot_card" in res:
                 view["sections"] = [{"chunk_id": res["snapshot_card"]["chunk_id"],
                                      "similarity": None,
-                                     "text": res["snapshot_card"]["text"][:500]}]
+                                     "text": res["snapshot_card"]["text"][:4000]}]
         elif "error" in res:
             view["summary"] = f"ERROR: {res['error']}"
             view["error"] = True
@@ -96,10 +156,20 @@ def _gates(result, evidence_view):
         "detail": (f"{len(evidence_view)} tool call(s): {n_rows} table row(s), {n_docs} document section(s) retrieved"
                    if evidence_view else "No tools were called - answer is not evidence-based"),
     })
+    # BUG FIX: this used to be `not low_conf and not errors`, which is a
+    # vacuous truth when NO tool was called at all - both list
+    # comprehensions come back empty, so "no low-confidence retrievals"
+    # and "no tool errors" were both trivially true, and this gate
+    # showed a clean PASS even though nothing was ever retrieved to be
+    # confident about. Requiring evidence_view to be non-empty first
+    # closes that gap - a query with zero tool calls now correctly
+    # fails this gate too, instead of contradicting "Tool grounding"
+    # right next to it.
     gates.append({
         "name": "Retrieval confidence",
-        "ok": not low_conf and not errors,
-        "detail": ("All retrievals confident, no tool errors" if not low_conf and not errors
+        "ok": bool(evidence_view) and not low_conf and not errors,
+        "detail": ("All retrievals confident, no tool errors" if evidence_view and not low_conf and not errors
+                   else "No tools were called - nothing was retrieved to be confident about" if not evidence_view
                    else f"{len(low_conf)} low-confidence retrieval(s), {len(errors)} tool error(s) - see trace"),
     })
     gates.append({
@@ -120,6 +190,79 @@ def _gates(result, evidence_view):
         gates.append({"name": "Hallucination audit", "ok": None,
                       "detail": f"Not performed ({verdict}) - offline mode has no auditor"})
     return gates
+
+
+def _append_jsonl(path, entry):
+    """Adds one JSON object as a new line to a log file, creating
+    output/ if it doesn't exist yet. Append-only, same pattern as
+    REVIEW_LOG already used - a log is a record, never edited in
+    place."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry, default=str) + "\n")
+
+
+def _rlhf_leaf(rating, evidence_answer, is_decline):
+    """Maps a rep's (rating, evidence_answer) pair, plus whether the
+    answer's own wording reads as a decline, onto the SAME leaves
+    build_dashboard.py's classify() uses for the golden test set - so
+    live feedback and golden results end up filed under one shared
+    vocabulary, not two different ones.
+
+    Question order here is the OPPOSITE of the golden tree's: the
+    tree asks "was evidence used" first, then implicitly checks "was
+    the answer correct". Here, correctness is asked first (the
+    existing rating buttons), evidence second - but it's the same
+    2x2 combination either way, so it lands on the same leaf
+    regardless of which axis was asked first.
+
+    Returns (leaf_name, color). color is None for the provisional
+    "flagged for review" cases - not a real leaf, a signal this needs
+    a human look rather than a guess."""
+    if rating == "vague":
+        return "Vague / non-answer", "amber"
+    if evidence_answer not in ("yes", "no"):
+        return f"{rating} - evidence unconfirmed, flagged for review", None
+    correct = rating == "correct"
+    evidence_ok = evidence_answer == "yes"
+    if evidence_ok and correct:
+        return "Correct answer", "green"
+    if evidence_ok and not correct:
+        return "Synthesis issue", "red"
+    if not evidence_ok and correct:
+        return ("Correctly rejected", "green") if is_decline else ("Correct anyway", "amber")
+    return ("Retrieval fail", "amber") if is_decline else ("Hallucination", "red")
+
+
+def _new_query_id():
+    """A short, sortable-enough id for one /ask call. Not a full UUID
+    on purpose - this shows up in the browser's network tab and in the
+    RLHF POST body, so it stays readable."""
+    return time.strftime("q_%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:6]
+
+
+def _log_query(query_id, question, status, result=None, gates=None,
+               evidence_view=None, error=None):
+    """Writes one line to output/QUERY_LOG/query_log.jsonl for every /ask call,
+    no matter how it ends up: delivered straight away, held in
+    quarantine, or blown up with a server error. status is one of
+    "delivered", "quarantined", or "error" - the same three outcomes
+    the browser already shows the user, just persisted this time
+    instead of only ever living in one browser tab."""
+    entry = {
+        "query_id": query_id,
+        "asked_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "question": question,
+        "status": status,
+        "answer": (result or {}).get("answer") if result else None,
+        "verdict": (result.get("verification") or {}).get("verdict") if result else None,
+        "revised": (result or {}).get("revised") if result else None,
+        "gates": gates or [],
+        "audit_trail": (result or {}).get("audit_trail", []) if result else [],
+        "evidence": evidence_view or [],
+        "error": error,
+    }
+    _append_jsonl(QUERY_LOG, entry)
 
 
 PAGE = r"""<!DOCTYPE html>
@@ -172,6 +315,13 @@ PAGE = r"""<!DOCTYPE html>
          padding:6px 10px;margin:5px 0;font-size:11.5px}
   .chunk .cid{font-family:var(--mono);font-size:10.5px;color:var(--brand);font-weight:700}
   .chunk .sim{color:var(--muted);font-size:10.5px}
+  .chunk .ctext{max-height:220px;overflow-y:auto;margin-top:4px}
+  .chunkpick{display:flex;flex-direction:column;gap:6px;margin:6px 0}
+  .chunkpick-opt{text-align:left;border:1.5px solid var(--line);border-radius:8px;background:#fff;
+                 padding:7px 10px;font-size:11.5px;cursor:pointer}
+  .chunkpick-opt:hover{border-color:var(--brand)}
+  .chunkpick-opt .cid{font-family:var(--mono);font-size:10.5px;color:var(--brand);font-weight:700;display:block}
+  .chunkpick-opt .prev{color:var(--muted);font-size:11px;margin-top:2px}
   .audit-round{padding:6px 10px;border-radius:8px;margin:5px 0;font-size:11.5px}
   .audit-round.pass{background:var(--ok-bg)} .audit-round.fail{background:var(--bad-bg)}
   .draft{background:#fbfbfd;border:1px dashed var(--line);border-radius:8px;padding:8px 12px;
@@ -186,6 +336,20 @@ PAGE = r"""<!DOCTYPE html>
   .qapprove{background:#fff;border-color:#9fd9be;color:var(--ok)}
   .qreject{background:#fff;border-color:#f0b1b1;color:var(--bad)}
   .qdecided{font-size:12px;font-weight:700;margin-top:8px}
+  /* rlhf */
+  .rlhf{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+  .rlhf-label{font-size:11px;color:var(--muted);margin-bottom:6px}
+  .rlhf-btns{display:flex;gap:8px;flex-wrap:wrap}
+  .rlhf-btn{padding:6px 12px;font-size:11.5px;font-weight:600;border-radius:20px;
+            border:1.5px solid var(--line);background:#fff;cursor:pointer;color:var(--muted)}
+  .rlhf-btn:hover{border-color:var(--brand);color:var(--brand)}
+  .rlhf-step1{display:none;margin-top:10px}
+  .rlhf-note{width:100%;margin-top:8px;display:none}
+  .rlhf-note textarea{width:100%;font:inherit;font-size:12px;padding:8px;border:1.5px solid var(--line);
+                       border-radius:8px;resize:vertical;min-height:50px;box-sizing:border-box}
+  .rlhf-note button{margin-top:6px;padding:5px 14px;font-size:11.5px;font-weight:600;color:#fff;
+                     background:var(--brand);border:none;border-radius:8px;cursor:pointer}
+  .rlhf-done{font-size:11.5px;font-weight:700;color:var(--ok)}
   .thinking{color:var(--muted);font-size:13px}
   .dots::after{content:'';animation:d 1.2s infinite}
   @keyframes d{0%{content:'.'}33%{content:'..'}66%{content:'...'}}
@@ -248,9 +412,10 @@ function traceHtml(d){
     h+=rowsTable(v.rows);
     if(v.more_rows)h+='<div class="tsummary">&hellip; and '+v.more_rows+' more row(s)</div>';
     for(const s of (v.sections||[])){
+      const cut = (s.text||'').length >= 4000;
       h+='<div class="chunk"><span class="cid">'+esc(s.chunk_id)+'</span>'
         +(s.similarity!=null?' <span class="sim">similarity '+s.similarity+'</span>':'')
-        +'<div>'+esc(s.text)+'&hellip;</div></div>';
+        +'<div class="ctext">'+esc(s.text)+(cut?'&hellip;':'')+'</div></div>';
     }
     h+='</div>';
   }
@@ -277,13 +442,163 @@ function logReview(question,d,decision){
     body:JSON.stringify({question:question,verdict:d.verdict,decision:decision,
                          issues:(last.issues||[]).map(String)})}).catch(()=>{});
 }
+// Two DIFFERENT question sets, picked by isDecline (from the server's
+// /ask response - see _is_decline in build_dashboard.py). Reasoning:
+// when the system declined/said "I don't know", asking "was this
+// answer correct?" then "was the right info in the evidence?" is
+// confusing - there's usually no evidence at all to judge, so "yes"
+// could mean either "yes it was right to decline" or "yes the info
+// was there" depending how the rep reads it. A real rep hit exactly
+// this: rated a decline "correct" then answered the evidence question
+// "yes" even though no tool/evidence was ever used, which silently
+// misfiled it as "Correct answer" instead of "Correctly rejected".
+// The decline branch below asks ONE direct question instead, and
+// always sends evidence_answer:'no' under the hood (nothing was used,
+// so there's nothing to confirm) - _rlhf_leaf's existing logic then
+// lands it on "Correctly rejected" or "Retrieval fail" automatically.
+function rlhfHtml(isDecline){
+  if(isDecline){
+    return '<div class="rlhf">'
+      +'<div class="rlhf-decline"><div class="rlhf-label">The system said it couldn&rsquo;t answer this. Was that the right call?</div>'
+      +'<div class="rlhf-btns">'
+      +'<button class="rlhf-btn" data-decline="correct">&#10003; Yes &mdash; correct, no answer exists</button>'
+      +'<button class="rlhf-btn" data-decline="incorrect">&#10007; No &mdash; an answer does exist, it should have found it</button>'
+      +'<button class="rlhf-btn" data-decline="unsure">Not sure</button>'
+      +'</div></div>'
+      +'<div class="rlhf-note"><textarea placeholder="Anything else worth noting? (optional)"></textarea>'
+      +'<button class="rlhf-submit">Submit</button></div></div>';
+  }
+  return '<div class="rlhf">'
+    +'<div class="rlhf-step0"><div class="rlhf-label">Was this answer correct?</div>'
+    +'<div class="rlhf-btns">'
+    +'<button class="rlhf-btn" data-rating="correct">&#10003; Correct</button>'
+    +'<button class="rlhf-btn" data-rating="partial">&#8211; Partially correct</button>'
+    +'<button class="rlhf-btn" data-rating="incorrect">&#10007; Incorrect</button>'
+    +'<button class="rlhf-btn" data-rating="vague">Vague &mdash; didn&rsquo;t really answer</button>'
+    +'</div></div>'
+    +'<div class="rlhf-step1"><div class="rlhf-label">Was the right info actually in the evidence or sources shown?</div>'
+    +'<div class="rlhf-btns">'
+    +'<button class="rlhf-btn" data-ev="yes">Yes</button>'
+    +'<button class="rlhf-btn" data-ev="no">No</button>'
+    +'<button class="rlhf-btn" data-ev="idk">I don&rsquo;t know</button>'
+    +'</div></div>'
+    +'<div class="rlhf-chunkpick" style="display:none"></div>'
+    +'<div class="rlhf-note"><textarea placeholder="Anything else worth noting? (optional)"></textarea>'
+    +'<button class="rlhf-submit">Submit</button></div></div>';
+}
+// Only ever shown when the rep says "Yes" AND there's at least one
+// retrieved chunk to pick from (a structured-lookup-only answer has
+// no chunks, so this step is skipped for those - nothing to point at).
+// Recording WHICH chunk, and its rank among what was retrieved, is the
+// live-traffic equivalent of the golden test set's own rank signal
+// (see build_dashboard.py's classify() - rank 1 vs ranked-lower is
+// exactly this same idea, just confirmed by ground truth there instead
+// of a human).
+function allSections(trace){
+  const out=[];
+  for(const v of (trace||[])) for(const s of (v.sections||[])) out.push(s);
+  return out;
+}
+function chunkPickHtml(sections){
+  let h='<div class="rlhf-label">Which chunk had the right info?</div><div class="chunkpick">';
+  sections.forEach((s,i)=>{
+    h+='<button class="chunkpick-opt" data-idx="'+i+'"><span class="cid">#'+(i+1)+' '+esc(s.chunk_id)+'</span>'
+      +'<span class="prev">'+esc((s.text||'').slice(0,140))+'&hellip;</span></button>';
+  });
+  h+='<button class="chunkpick-opt" data-idx="-1" style="color:var(--muted)">Not sure which one</button></div>';
+  return h;
+}
+// The browser already has the FULL answer (d) in memory from the
+// original /ask response - passed straight through here so the RLHF
+// log entry is self-contained (answer, gates, evidence, audit trail)
+// rather than a bare query_id the reviewer has to go join elsewhere.
+function submitRlhf(queryId,question,rating,evidenceAnswer,confirmedChunkId,confirmedChunkRank,note,box,d){
+  fetch('/rlhf',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({query_id:queryId,question:question,rating:rating,evidence_answer:evidenceAnswer,
+                         confirmed_chunk_id:confirmedChunkId,confirmed_chunk_rank:confirmedChunkRank,
+                         note:note||'',answer:d.answer,gates:d.gates,trace:d.trace,
+                         audit_trail:d.audit_trail,draft_answer:d.draft_answer,
+                         verdict:d.verdict,quarantined:d.quarantined})})
+    .then(r=>r.json()).then(res=>{
+      box.outerHTML='<div class="rlhf"><div class="rlhf-done">&#10003; Feedback recorded &mdash; logged as: '
+        +esc(res.leaf||'unclassified')+'</div></div>';
+    }).catch(()=>{
+      box.outerHTML='<div class="rlhf"><div class="rlhf-done">&#10003; Feedback recorded</div></div>';
+    });
+}
+// Every query the agent answers gets a query_id from the server (see
+// _new_query_id in chat_ui.py); wireRlhf is what ties a rating back to
+// that exact query. Two clicks (was it correct, was the evidence
+// there), then an optional note, mirrors the same two axes the golden
+// test set decision tree uses - see _rlhf_leaf() in chat_ui.py for how
+// the two answers get combined into one of its leaves.
+function wireRlhf(node,queryId,question,d){
+  const box=node.querySelector('.rlhf');
+  if(!box)return;
+  const noteBox=box.querySelector('.rlhf-note');
+  let rating=null, evidenceAnswer=null, confirmedChunkId=null, confirmedChunkRank=null;
+
+  const declineStep=box.querySelector('.rlhf-decline');
+  if(declineStep){
+    // Decline flow: one click, no evidence question at all - evidence
+    // is always sent as 'no' since a decline means nothing was used,
+    // so there's nothing for the rep to confirm. See rlhfHtml() above.
+    const DECLINE_MAP={correct:['correct','no'],incorrect:['incorrect','no'],unsure:['partial','idk']};
+    declineStep.querySelectorAll('.rlhf-btn').forEach(btn=>{
+      btn.onclick=()=>{
+        const pair=DECLINE_MAP[btn.dataset.decline];
+        rating=pair[0]; evidenceAnswer=pair[1];
+        declineStep.style.display='none';
+        noteBox.style.display='block';
+      };
+    });
+  } else {
+    const step0=box.querySelector('.rlhf-step0'), step1=box.querySelector('.rlhf-step1'),
+          chunkPick=box.querySelector('.rlhf-chunkpick');
+    step0.querySelectorAll('.rlhf-btn').forEach(btn=>{
+      btn.onclick=()=>{
+        rating=btn.dataset.rating;
+        step0.style.display='none';
+        step1.style.display='block';
+      };
+    });
+    step1.querySelectorAll('.rlhf-btn').forEach(btn=>{
+      btn.onclick=()=>{
+        evidenceAnswer=btn.dataset.ev;
+        step1.style.display='none';
+        const sections = evidenceAnswer==='yes' ? allSections(d.trace) : [];
+        if(sections.length){
+          chunkPick.innerHTML=chunkPickHtml(sections);
+          chunkPick.style.display='block';
+          chunkPick.querySelectorAll('.chunkpick-opt').forEach(opt=>{
+            opt.onclick=()=>{
+              const idx=parseInt(opt.dataset.idx,10);
+              if(idx>=0){ confirmedChunkId=sections[idx].chunk_id; confirmedChunkRank=idx+1; }
+              chunkPick.style.display='none';
+              noteBox.style.display='block';
+            };
+          });
+        } else {
+          noteBox.style.display='block';
+        }
+      };
+    });
+  }
+
+  noteBox.querySelector('.rlhf-submit').onclick=()=>{
+    const note=noteBox.querySelector('textarea').value.trim();
+    submitRlhf(queryId,question,rating,evidenceAnswer,confirmedChunkId,confirmedChunkRank,note,box,d);
+  };
+}
 function addAnswer(d,question){
   if(d.quarantined){ addQuarantined(d,question); return; }
   let h='<div class="msg bot"><div class="who">Assistant</div><div class="bubble">'+md(d.answer);
   h+='<div class="gates">'+d.gates.map(gateHtml).join('')+'</div>';
   h+=detailsHtml(d);
+  h+=rlhfHtml(d.is_decline);
   h+='</div></div>';
-  chat.appendChild(el(h)); chat.scrollTop=chat.scrollHeight;
+  const node=el(h); chat.appendChild(node); chat.scrollTop=chat.scrollHeight;
+  wireRlhf(node,d.query_id,question,d);
 }
 function addQuarantined(d,question){
   const last=(d.audit_trail||[]).slice(-1)[0]||{};
@@ -305,7 +620,11 @@ function addQuarantined(d,question){
       '<div class="bubble">'+md(d.answer)
       +'<div class="gates">'+d.gates.map(gateHtml).join('')+'</div>'
       +detailsHtml(d)
-      +'<div class="qdecided" style="color:var(--ok)">&#10003; Released by reviewer (decision logged)</div></div>';
+      +'<div class="qdecided" style="color:var(--ok)">&#10003; Released by reviewer (decision logged)</div>'
+      +rlhfHtml(d.is_decline)+'</div>';
+    // Only wire the RLHF widget once the answer is actually visible to
+    // a user - a rejected quarantined answer never gets a widget at all.
+    wireRlhf(node,d.query_id,question,d);
   };
   node.querySelector('.qreject').onclick=()=>{
     logReview(question,d,'rejected');
@@ -352,9 +671,14 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/review":
             self._handle_review()
             return
+        if self.path == "/rlhf":
+            self._handle_rlhf()
+            return
         if self.path != "/ask":
             self.send_error(404)
             return
+        question = ""
+        query_id = _new_query_id()
         try:
             length = int(self.headers.get("Content-Length", 0))
             payload = json.loads(self.rfile.read(length) or b"{}")
@@ -364,23 +688,37 @@ class Handler(BaseHTTPRequestHandler):
             with _agent_lock:
                 result = _agent.ask(question)
             ev = _evidence_view(result["evidence"])
+            gates = _gates(result, ev)
             verdict = (result.get("verification") or {}).get("verdict")
+            # Quarantine rule: only a clean audit pass ships directly.
+            # "fail" and "audit_error" are withheld for a human.
+            # "not_checked" (offline mode, no auditor) is delivered
+            # but clearly labeled by its gate.
+            quarantined = verdict in ("fail", "audit_error")
+            _log_query(query_id, question, "quarantined" if quarantined else "delivered",
+                       result=result, gates=gates, evidence_view=ev)
+            # is_decline travels with the answer so the browser's RLHF
+            # widget can ask a DIFFERENT, more intuitive question when the
+            # system declined - see rlhfHtml()/wireRlhf() below. Computed
+            # once here (same _is_decline the golden test set uses) so the
+            # client never has to re-implement the phrase check itself.
             body = json.dumps({
+                "query_id": query_id,
                 "answer": result["answer"],
-                "gates": _gates(result, ev),
+                "is_decline": _is_decline(result["answer"]),
+                "gates": gates,
                 "trace": ev,
                 "audit_trail": result.get("audit_trail", []),
                 "draft_answer": result.get("draft_answer"),
                 "verdict": verdict,
-                # Quarantine rule: only a clean audit pass ships directly.
-                # "fail" and "audit_error" are withheld for a human.
-                # "not_checked" (offline mode, no auditor) is delivered
-                # but clearly labeled by its gate.
-                "quarantined": verdict in ("fail", "audit_error"),
+                "quarantined": quarantined,
             }, default=str).encode("utf-8")
             self.send_response(200)
         except Exception as e:
-            body = json.dumps({"answer": f"Server error: {type(e).__name__}: {e}",
+            _log_query(query_id, question, "error", error=f"{type(e).__name__}: {e}")
+            body = json.dumps({"query_id": query_id,
+                               "answer": f"Server error: {type(e).__name__}: {e}",
+                               "is_decline": False,
                                "gates": [], "trace": [], "audit_trail": [],
                                "draft_answer": None}).encode("utf-8")
             self.send_response(500)
@@ -404,10 +742,75 @@ class Handler(BaseHTTPRequestHandler):
                               else "rejected"),
                 "issues": payload.get("issues", [])[:10],
             }
-            os.makedirs("output", exist_ok=True)
+            os.makedirs(os.path.dirname(REVIEW_LOG), exist_ok=True)
             with open(REVIEW_LOG, "a", encoding="utf-8") as f:
                 f.write(json.dumps(entry) + "\n")
             body = json.dumps({"ok": True}).encode("utf-8")
+            self.send_response(200)
+        except Exception as e:
+            body = json.dumps({"ok": False, "error": str(e)}).encode("utf-8")
+            self.send_response(500)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _handle_rlhf(self):
+        """Records a human rating on an answer the user actually saw -
+        correct / partially correct / incorrect / vague, plus the
+        follow-up "was the right info in the evidence" answer. Every
+        rating is logged, including a plain "correct" with no note -
+        the point is a complete record of every judgment made, not
+        just the interesting ones.
+
+        The browser already holds the full answer/gates/trace/audit
+        trail from the original /ask response (it's just sitting in
+        the page's memory), so it sends all of that back here rather
+        than making this handler re-read query_log.jsonl to reconstruct
+        it - one self-contained record per rating, no join required to
+        make sense of it later."""
+        try:
+            length = int(self.headers.get("Content-Length", 0))
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            rating = str(payload.get("rating", ""))
+            if rating not in ("correct", "partial", "incorrect", "vague"):
+                raise ValueError(f"unrecognised rating: {rating!r}")
+            evidence_answer = str(payload.get("evidence_answer", ""))
+            if evidence_answer not in ("yes", "no", "idk"):
+                evidence_answer = "idk"
+            answer_text = str(payload.get("answer", ""))
+            decline = _is_decline(answer_text)
+            leaf, color = _rlhf_leaf(rating, evidence_answer, decline)
+            # Which chunk (if any) the rep pointed to as having the right
+            # info, and its rank among what was retrieved - the live-
+            # traffic equivalent of the golden test set's rank signal.
+            # Only ever set when evidence_answer == "yes" AND there were
+            # real chunks to choose from (see chunkPickHtml in the page's
+            # JS) - None otherwise, not a guessed value.
+            confirmed_chunk_id = payload.get("confirmed_chunk_id")
+            confirmed_chunk_rank = payload.get("confirmed_chunk_rank")
+            entry = {
+                "rated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                "query_id": str(payload.get("query_id", ""))[:80],
+                "question": str(payload.get("question", ""))[:500],
+                "answer": answer_text,
+                "gates": payload.get("gates", []),
+                "evidence": payload.get("trace", []),
+                "audit_trail": payload.get("audit_trail", []),
+                "draft_answer": payload.get("draft_answer"),
+                "system_verdict": payload.get("verdict"),
+                "quarantined": bool(payload.get("quarantined")),
+                "rating": rating,
+                "evidence_answer": evidence_answer,
+                "confirmed_chunk_id": (str(confirmed_chunk_id) if confirmed_chunk_id else None),
+                "confirmed_chunk_rank": (int(confirmed_chunk_rank) if confirmed_chunk_rank else None),
+                "auto_decline_detected": decline,
+                "leaf": leaf,
+                "color": color,
+                "note": (str(payload.get("note", "")).strip()[:1000] or None),
+            }
+            _append_jsonl(RLHF_LOG, entry)
+            body = json.dumps({"ok": True, "leaf": leaf, "color": color}, default=str).encode("utf-8")
             self.send_response(200)
         except Exception as e:
             body = json.dumps({"ok": False, "error": str(e)}).encode("utf-8")

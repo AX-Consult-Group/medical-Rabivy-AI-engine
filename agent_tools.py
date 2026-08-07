@@ -38,7 +38,18 @@ def _trim_row(row):
     for f in _ROW_FIELDS:
         if f in row:
             v = row[f]
-            if isinstance(v, (np.integer,)):
+            if f == "propensity_score" and isinstance(v, (float, np.floating)):
+                # 2026-08-05: propensity_score is shown to the LLM as a
+                # 0-100 whole-number percentage now, not the raw 0-1
+                # score - matches the HCP snapshot docs' own "X/100"
+                # convention and query_spreadsheet.py's formatters. Found
+                # via a real eval: the agent answered "0.367" for a
+                # propensity question while ground truth (and the docs)
+                # expected "37" - same number, two scales. Filtering/
+                # sorting elsewhere still uses the raw 0-1 dataframe
+                # value - this only changes what's DISPLAYED.
+                v = round(float(v) * 100)
+            elif isinstance(v, (np.integer,)):
                 v = int(v)
             elif isinstance(v, (float, np.floating)):
                 # Round EVERY float (plain Python floats included - pandas
@@ -217,7 +228,7 @@ TOOL_SCHEMAS = [
                                          "filters the search to that state's documents "
                                          "only. Leave unset for questions not about a "
                                          "specific state.")},
-                "top_k": {"type": "integer", "description": "Sections to return (default 4, max 8)"},
+                "top_k": {"type": "integer", "description": "Sections to return (default 5, max 8)"},
             },
             "required": ["query"],
         },
@@ -332,8 +343,15 @@ def _aggregate_hcp_stats(inp):
     column = inp.get("column", "propensity_score")
     if column not in sub.columns:
         return {"error": f"'{column}' is not a real column."}
-    return {"source": "hcp_propensity_table", "count": len(sub),
-            "mean": round(float(sub[column].mean()), 3)}
+    mean_val = float(sub[column].mean())
+    if column == "propensity_score":
+        # Same 0-1 -> 0-100 display scaling as _trim_row above, so an
+        # aggregate propensity answer matches the same convention as a
+        # single-row one instead of contradicting it.
+        mean_val = round(mean_val * 100)
+    else:
+        mean_val = round(mean_val, 3)
+    return {"source": "hcp_propensity_table", "count": len(sub), "mean": mean_val}
 
 
 def _states_summary(inp):
@@ -354,7 +372,11 @@ def _search_documents(inp):
     # Also now takes state as its own explicit parameter rather than
     # relying on the state name being embedded in the free-text query -
     # see the "state" field added to this tool's input_schema above.
-    top_k = min(int(inp.get("top_k", 4)), 8)
+    # 2026-08-04: default raised from 4 to 5 to match search_documents.py's
+    # own default and the "found within top 5" bar the eval scripts
+    # (test_retrieval_ranking.py, test_article_retrieval.py) already use -
+    # the agent's default was quietly stricter than what the eval measured.
+    top_k = min(int(inp.get("top_k", 5)), 8)
     data = search_documents.semantic_search(
         inp["query"], state=inp.get("state"), top_k=top_k)
     if not data.get("found", True):
