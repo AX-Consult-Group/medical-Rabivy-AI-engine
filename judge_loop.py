@@ -47,6 +47,7 @@ import argparse
 import json
 import os
 import random
+import re
 import urllib.request
 
 # =====================================================================
@@ -105,14 +106,32 @@ def _build_prompt(question, evidence_text, given_answer):
             f"Is the answer actually supported by the evidence above?")
 
 
+_CODE_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?(.*?)\n?```\s*$", re.DOTALL)
+
+
 def _parse_verdict(text):
     """Both real backends funnel through here so a malformed reply fails
     the same way regardless of which model sent it. An unparseable
     reply is treated as 'unsupported' rather than silently dropped or
     treated as a pass - erring toward flagging for review, not toward
-    trusting a judge whose output we couldn't even read."""
+    trusting a judge whose output we couldn't even read.
+
+    FIXED 2026-08-11: real Claude replies sometimes wrap the JSON in a
+    ```json ... ``` markdown fence despite JUDGE_SYSTEM saying "ONLY a
+    JSON object, no other text" - json.loads() chokes on the backticks
+    and this used to fall straight into the unparseable/unsupported
+    branch below. That silently passed the real exam run (74%, bar 90%)
+    because the "default to unsupported" fallback happened to match
+    true_verdict on every method except conversation_memory (the only
+    one whose true_verdict is "supported") - which is why that one
+    category alone came back 0/8. Strip a fence, if present, before
+    parsing."""
+    text = text.strip()
+    fence_match = _CODE_FENCE_RE.match(text)
+    if fence_match:
+        text = fence_match.group(1).strip()
     try:
-        data = json.loads(text.strip())
+        data = json.loads(text)
         verdict = data.get("verdict")
         if verdict not in ("supported", "unsupported"):
             raise ValueError(f"unexpected verdict value: {verdict!r}")
@@ -232,9 +251,39 @@ JUDGE_REVIEW_PATH = os.path.join(OUTPUT_DIR, "judge_review.jsonl")
 KAPPA_REPORT_PATH = os.path.join(OUTPUT_DIR, "kappa_report.json")
 QUERY_LOG_PATH = os.path.join("output", "QUERY_LOG", "query_log.jsonl")
 
+# History logs, added 2026-08-11 - EXAM_RESULT_PATH/JUDGE_REVIEW_PATH/
+# KAPPA_REPORT_PATH above are each OVERWRITTEN by every run (by design -
+# they're "latest snapshot" files other code reads, e.g.
+# human_review_ui.py reads JUDGE_REVIEW_PATH as the current case pool).
+# That's fine for driving the next step of the pipeline, but it means
+# nothing is kept once a run is superseded - no trend, no "what did the
+# exam score last week" for a future dashboard. These three append one
+# JSON line per run instead, full detail, nothing summarized away, so a
+# dashboard can be built against them later without re-instrumenting -
+# same mistake we don't want to repeat from the golden-test dashboard.
+EXAM_HISTORY_PATH = os.path.join(OUTPUT_DIR, "exam_history.jsonl")
+REVIEW_HISTORY_PATH = os.path.join(OUTPUT_DIR, "review_history.jsonl")
+REPORT_HISTORY_PATH = os.path.join(OUTPUT_DIR, "report_history.jsonl")
+
 PASS_BAR = float(os.environ.get("EXAM_PASS_BAR", "0.90"))
 SAMPLE_SIZE_PER_COLOR = int(os.environ.get("LIVE_JUDGE_SAMPLE_SIZE", "5"))
 SAMPLE_SEED = int(os.environ.get("LIVE_JUDGE_SAMPLE_SEED", "42"))  # fixed -> reproducible sampling
+
+
+def _now_iso():
+    from datetime import datetime, timezone
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _append_history(path, record):
+    """Appends one full JSON record as a line - never rewrites or prunes
+    earlier lines, so every past run stays on disk exactly as it
+    happened. Used by --exam/--review/--report so a future dashboard has
+    a genuine history to read, not just whatever the most recent run
+    happened to leave behind."""
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(record) + "\n")
 
 
 def _format_evidence_block(fresh_evidence_text, preceding_context):
@@ -297,8 +346,45 @@ def _facts_as_answer(facts):
     """Turns a NARRATIVE_FACTS 'facts' list (ground_truth.py's format -
     a mix of plain strings and [alternative, alternative] lists) into
     one representative answer sentence."""
-    terms = [f[0] if isinstance(f, list) else f for f in facts]
-    return f"Based on the evidence: {'; '.join(terms)}."
+    return f"Based on the evidence: {'; '.join(_answer_terms(facts))}."
+
+
+def _answer_terms(facts):
+    """The flat term list behind a NARRATIVE_FACTS 'facts' list - split
+    out so _facts_as_answer() and the evidence-overlap checks below
+    (_kept_without_answer_evidence, _find_synthesis_donor) all use the
+    exact same terms, not independently-written extractions that could
+    quietly drift apart."""
+    return [f[0] if isinstance(f, list) else f for f in facts]
+
+
+def _term_words(facts):
+    """Lowercased word set behind a facts list's terms - deliberately
+    NOT built from _facts_as_answer()'s full sentence, since its
+    'Based on the evidence:' boilerplate words ('the', 'evidence', ...)
+    would otherwise pollute an overlap check against ordinary prose."""
+    return set(w for t in _answer_terms(facts) for w in t.lower().split())
+
+
+def _resolve_facts(nf):
+    """Three NARRATIVE_FACTS entries (missouri_market, arizona_market,
+    typical_endocrinologist) deliberately store facts=None - their real
+    facts are computed LIVE from a doc/spreadsheet instead of hardcoded
+    (see ground_truth.py's own comments on those entries). Mirrors
+    test_the_agent.py's _layer3() fallback chain exactly, so gold items
+    are built from the same facts the golden 30 is actually scored
+    against. Returns None if the live computation itself fails (e.g. the
+    source doc or spreadsheet is missing/unparseable) - caller should
+    skip that item, same as a missing correct_chunk already does."""
+    if nf["facts"] is not None:
+        return nf["facts"]
+    import ground_truth as gt
+    if nf.get("state"):
+        fact = gt.gt_state_market_fact(nf["state"])
+        return [fact] if fact is not None else None
+    if nf.get("specialty"):
+        return gt.gt_specialty_benchmark_facts(nf["specialty"])
+    return None
 
 
 def _format_chunk_results(results):
@@ -332,6 +418,76 @@ def _find_distractor(chunks, exclude_chunk_id, answer_text, doc_type):
     return None
 
 
+def _find_synthesis_donor(narrative_qs, gt, key, correct_chunk_text):
+    """First OTHER narrative question (in QUESTIONS order - deterministic,
+    reproducible run to run) whose real facts DON'T already appear
+    somewhere in correct_chunk's own text. The old version just took
+    the next question in rotation with no such check - a real problem
+    because 'monthly dosing' is the company's single core commercial
+    message and repeats across nearly every doc, so a fixed +1 donor
+    could easily land on facts that are, coincidentally, also sitting
+    right there in the 'correct' chunk. Found 2026-08-11 via a real
+    exam run: competitive_switchers__synthesis_issue was marked
+    'unsupported' but the judge correctly called it supported, because
+    the borrowed donor answer (zepbound_differentiator's 'monthly
+    dosing') genuinely was backed by the shown evidence too - the gold
+    item's premise was wrong, not the judge. Returns (None, None) if no
+    non-overlapping donor exists among the golden 30."""
+    chunk_words = set(correct_chunk_text.lower().split())
+    for other in narrative_qs:
+        other_key = other["narrative_key"]
+        if other_key == key:
+            continue
+        other_nf = gt.NARRATIVE_FACTS.get(other_key)
+        if other_nf is None:
+            continue
+        other_facts = _resolve_facts(other_nf)
+        if other_facts is None:
+            continue
+        if _term_words(other_facts) & chunk_words:
+            continue
+        return other_key, other_facts
+    return None, None
+
+
+def _established_sentence(nf, resolved_facts, correct_chunk):
+    """A natural, source-grounded sentence standing in for what a REAL
+    prior turn's assistant message would have looked like - not just
+    _facts_as_answer()'s bare term-list ('283.' / '1536; 37.'), which a
+    rigorous judge correctly finds too cryptic to trust as 'established'
+    on its own (found 2026-08-11: this was most of the
+    conversation_memory 0/8 -> 2/8 failure - real judge_reasoning:
+    'the number 283 without context', '1536; 37 without any supporting
+    evidence').
+
+    For hardcoded facts, the correct chunk's own real text already
+    states them in context, so reuse it verbatim - genuinely sourced,
+    nothing invented.
+
+    For the two 'computed LIVE, not hardcoded' cases (state market
+    figures, specialty benchmark - see ground_truth.py's own comments
+    on missouri_market/arizona_market/typical_endocrinologist), the
+    correct chunk's TEXT does NOT state the live number, and per
+    ground_truth.py's own documented doc-vs-live drift may state a
+    stale DIFFERENT one - quoting it here would be actively misleading.
+    Those two instead get a short factual sentence built only from the
+    fact's own governing label (state or specialty - both already in
+    NARRATIVE_FACTS) plus the live number itself. No outside claim is
+    added beyond what NARRATIVE_FACTS and the live computation already
+    assert."""
+    if nf["facts"] is not None:
+        return correct_chunk["text"]
+    if nf.get("state"):
+        return (f"{nf['state']}'s HCP universe, per the state market summary, "
+                f"is {resolved_facts[0]}.")
+    if nf.get("specialty"):
+        population, mean_propensity = resolved_facts
+        pop_str = population[-1] if isinstance(population, list) else population
+        return (f"For {nf['specialty']}, the benchmark population is {pop_str} "
+                f"with a mean propensity score of {mean_propensity}.")
+    return _facts_as_answer(resolved_facts)  # fallback - shouldn't happen given the two checks above
+
+
 def _make_gold_item(item_id, method, question, evidence_text, given_answer, true_verdict, note):
     return {"item_id": item_id, "method": method, "question": question,
             "evidence_text": evidence_text, "given_answer": given_answer,
@@ -355,12 +511,25 @@ def build_gold_items():
         correct_chunk = _find_correct_chunk(chunks, nf["tag"])
         if correct_chunk is None:
             continue
+        resolved_facts = _resolve_facts(nf)
+        if resolved_facts is None:
+            continue  # live fact computation failed (doc/spreadsheet missing) - skip, same as a missing chunk
 
         question_text = q["q"]
-        true_answer = _facts_as_answer(nf["facts"])
+        true_answer = _facts_as_answer(resolved_facts)
+        term_words = _term_words(resolved_facts)
         real_results = search_documents.semantic_search(question_text, top_k=6)
+        # Correct chunk removed AND any other surviving chunk that
+        # happens to already state the same facts also stripped -
+        # otherwise "retrieval gap" isn't a genuine gap when a repeated
+        # message (e.g. "monthly dosing") also appears verbatim in a
+        # different chunk that's still in the list. Found 2026-08-11:
+        # the judge was correctly reading real supporting text still in
+        # "kept" and calling those items supported - the gold item's
+        # premise was wrong, not the judge.
         kept = [r for r in real_results.get("results", [])
-                if r["chunk"]["chunk_id"] != correct_chunk["chunk_id"]]
+                if r["chunk"]["chunk_id"] != correct_chunk["chunk_id"]
+                and not (term_words & set(r["chunk"]["text"].lower().split()))]
 
         # ---- 1. retrieval gap ----
         items.append(_make_gold_item(
@@ -386,21 +555,19 @@ def build_gold_items():
             ))
 
         # ---- 3. synthesis issue (borrow another Q's real facts) ----
-        donor_idx = (narrative_qs.index(q) + 1) % len(narrative_qs)
-        donor_key = narrative_qs[donor_idx]["narrative_key"]
-        if donor_key != key:
-            donor_nf = gt.NARRATIVE_FACTS.get(donor_key)
-            if donor_nf is not None:
-                wrong_answer = _facts_as_answer(donor_nf["facts"])
-                items.append(_make_gold_item(
-                    f"{key}__synthesis_issue", "synthesis_issue", question_text,
-                    _format_evidence_block(
-                        _format_chunk_results([{"chunk": correct_chunk, "score": 0.0}]), None),
-                    wrong_answer, "unsupported",
-                    f"Correct evidence kept as-is, but the answer shown is "
-                    f"actually the real facts for a different golden question "
-                    f"('{donor_key}') - guaranteed unrelated.",
-                ))
+        donor_key, donor_facts = _find_synthesis_donor(narrative_qs, gt, key, correct_chunk["text"])
+        if donor_key is not None:
+            wrong_answer = _facts_as_answer(donor_facts)
+            items.append(_make_gold_item(
+                f"{key}__synthesis_issue", "synthesis_issue", question_text,
+                _format_evidence_block(
+                    _format_chunk_results([{"chunk": correct_chunk, "score": 0.0}]), None),
+                wrong_answer, "unsupported",
+                f"Correct evidence kept as-is, but the answer shown is "
+                f"actually the real facts for a different golden question "
+                f"('{donor_key}'), confirmed to not already appear in the "
+                f"correct chunk's own text.",
+            ))
 
         # ---- 4. natural failure, computed live ----
         top_chunk_ids = [r["chunk"]["chunk_id"] for r in real_results.get("results", [])]
@@ -414,10 +581,11 @@ def build_gold_items():
                 "correct chunk genuinely isn't in the top results right now.",
             ))
 
-        # ---- 5. conversation memory (added 2026-08-07) ----
+        # ---- 5. conversation memory (added 2026-08-07, fixed 2026-08-11) ----
+        established_text = _established_sentence(nf, resolved_facts, correct_chunk)
         prior_turn = [
             {"role": "user", "content": question_text},
-            {"role": "assistant", "content": true_answer},
+            {"role": "assistant", "content": established_text},
         ]
         items.append(_make_gold_item(
             f"{key}__conversation_memory", "conversation_memory", question_text,
@@ -425,8 +593,10 @@ def build_gold_items():
             true_answer, "supported",
             "No fresh tool call this turn - the answer is a legitimate "
             "restatement of what was already correctly established earlier "
-            "in the same conversation. Should be judged supported, not "
-            "flagged just because nothing was retrieved THIS turn.",
+            "in the same conversation (shown here as real, source-grounded "
+            "text, not a bare term list - see _established_sentence()). "
+            "Should be judged supported, not flagged just because nothing "
+            "was retrieved THIS turn.",
         ))
 
     return items
@@ -492,6 +662,15 @@ def run_exam():
         correct += is_correct
         results.append({
             "item_id": item["item_id"], "method": item["method"],
+            "question": item["question"], "evidence_text": item["evidence_text"],
+            "given_answer": item["given_answer"],
+            # question/evidence_text/given_answer added 2026-08-11 - without
+            # them, a past exam run in EXAM_HISTORY_PATH only shows verdicts
+            # and reasoning, not what the judge actually looked at. That's
+            # invisible today (gold_items.jsonl has it), but gold_items.jsonl
+            # is a "latest" snapshot --build-gold OVERWRITES every run, so
+            # it can't be trusted to still match an OLDER exam run's items -
+            # each history record needs to be self-contained.
             "true_verdict": item["true_verdict"], "judge_verdict": verdict["verdict"],
             "judge_reasoning": verdict["reasoning"], "correct": is_correct,
         })
@@ -499,7 +678,8 @@ def run_exam():
     total = len(items)
     accuracy = correct / total if total else 0.0
     summary = {
-        "judge_backend": judge.name, "total_items": total, "correct": correct,
+        "run_at": _now_iso(), "judge_backend": judge.name,
+        "total_items": total, "correct": correct,
         "accuracy": accuracy, "pass_bar": PASS_BAR,
         "passed": accuracy >= PASS_BAR and total > 0,
         "results": results,
@@ -507,6 +687,7 @@ def run_exam():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     with open(EXAM_RESULT_PATH, "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
+    _append_history(EXAM_HISTORY_PATH, summary)  # full run, kept forever - see EXAM_HISTORY_PATH's own comment
     return summary
 
 
@@ -578,6 +759,7 @@ def sample_batch(rows, rng):
 
 
 def review_batch(rows, judge):
+    reviewed_at = _now_iso()  # one timestamp for the whole batch - they're reviewed together, in one run
     reviewed = []
     for row in rows:
         color = _row_color(row)
@@ -591,6 +773,11 @@ def review_batch(rows, judge):
             "gate_color": color, "judge_verdict": verdict["verdict"],
             "judge_reasoning": verdict["reasoning"],
             "agrees_with_gates": agrees, "flagged_for_human": not agrees,
+            # judge_backend/reviewed_at added 2026-08-11 so a case in
+            # judge_review.jsonl or a future dashboard can be read
+            # standalone, without cross-referencing a separate run log
+            # for which model/when produced it.
+            "judge_backend": judge.name, "reviewed_at": reviewed_at,
         })
     return reviewed
 
@@ -620,6 +807,12 @@ def cmd_review():
     with open(JUDGE_REVIEW_PATH, "w", encoding="utf-8") as f:
         for r in reviewed:
             f.write(json.dumps(r) + "\n")
+    # Full batch, kept forever - see REVIEW_HISTORY_PATH's own comment above.
+    _append_history(REVIEW_HISTORY_PATH, {
+        "run_at": _now_iso(), "judge_backend": judge.name,
+        "sampled_green_n": len(sampled_green), "sampled_amber_n": len(sampled_amber),
+        "rows": reviewed,
+    })
 
     flagged = sum(1 for r in reviewed if r["flagged_for_human"])
     print(f"Judge backend: {judge.name}")
@@ -663,6 +856,16 @@ def _load_judge_verdicts():
     return {row["query_id"]: row["judge_verdict"] for row in _read_jsonl(JUDGE_REVIEW_PATH)}
 
 
+def _load_judge_backend():
+    """Which backend/model produced the batch in JUDGE_REVIEW_PATH - all
+    rows in one --review run share it (see review_batch()), so the
+    first row's is enough. Kept separate from _load_judge_verdicts() so
+    tests can monkeypatch that one alone without also having to fake
+    this."""
+    rows = _read_jsonl(JUDGE_REVIEW_PATH)
+    return rows[0].get("judge_backend") if rows else None
+
+
 def build_kappa_report():
     from human_review_ui import load_human_votes
     judge_verdicts = _load_judge_verdicts()
@@ -675,6 +878,7 @@ def build_kappa_report():
         for qid in shared_ids if judge_verdicts[qid] != human_verdicts[qid]
     ]
     return {
+        "run_at": _now_iso(), "judge_backend": _load_judge_backend(),
         "judge_only_ids": sorted(set(judge_verdicts) - set(human_verdicts)),
         "human_only_ids": sorted(set(human_verdicts) - set(judge_verdicts)),
         "compared_n": len(shared_ids),
@@ -689,6 +893,7 @@ def cmd_report():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
     with open(KAPPA_REPORT_PATH, "w", encoding="utf-8") as f:
         json.dump(report, f, indent=2)
+    _append_history(REPORT_HISTORY_PATH, report)  # full run, kept forever - see REPORT_HISTORY_PATH's own comment above
 
     n = report["compared_n"]
     if n == 0:

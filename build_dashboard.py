@@ -347,6 +347,15 @@ def _golden_trend(series):
 QUERY_LOG_PATH = os.path.join("output", "QUERY_LOG", "query_log.jsonl")
 RLHF_LOG_PATH = os.path.join("output", "RLHF_FEEDBACK", "rlhf_log.jsonl")
 
+# judge_loop.py's own output - see that file for what writes these.
+# Deliberately redefined here rather than imported from judge_loop.py,
+# same self-contained-file convention QUERY_LOG_PATH/RLHF_LOG_PATH
+# above already follow (this file doesn't import chat_ui.py either).
+LABEL_LOOP_DIR = os.path.join("output", "LABEL_LOOP")
+EXAM_HISTORY_PATH = os.path.join(LABEL_LOOP_DIR, "exam_history.jsonl")
+REVIEW_HISTORY_PATH = os.path.join(LABEL_LOOP_DIR, "review_history.jsonl")
+REPORT_HISTORY_PATH = os.path.join(LABEL_LOOP_DIR, "report_history.jsonl")
+
 # Each gate's OWN failure severity - these are NOT uniform, but only ONE
 # of them is actually red. Reconciled 2026-08-07: "Source citations"
 # used to be red here, but chat_ui.py's real quarantine rule
@@ -603,6 +612,102 @@ def _load_live():
     return {"label": "Live queries", "kpi": _live_kpi(rows),
             "rlhf_kpi": _rlhf_kpi(rows), "rows": rows,
             "live_trend": _live_trend(rows), "rlhf_trend": _rlhf_trend(rows)}
+
+
+# =====================================================================
+# CONTRARIAN JUDGE - "Batch review" sub-tab under Live Queries
+# ---------------------------------------------------------------------
+# Reads judge_loop.py's three append-only history logs (never the
+# "latest" snapshot files judge_loop.py itself overwrites each run -
+# see EXAM_HISTORY_PATH/REVIEW_HISTORY_PATH/REPORT_HISTORY_PATH's own
+# comments in judge_loop.py) plus human_review_ui.py's human_votes.jsonl,
+# and merges them into one item-by-item, fully expandable view: every
+# gold-item exam result, every sampled live case with its judge verdict
+# AND human verdict side by side, and the kappa comparison. Lives under
+# the Live Queries tab (not its own top-level tab) because it only ever
+# reviews live queries - it's a deeper QA lens on that same data, the
+# same relationship RLHF feedback already has to Live Queries.
+# =====================================================================
+
+def _load_judge_history_votes():
+    """{query_id: verdict} from human_votes.jsonl, latest vote per
+    query_id wins - identical rule to human_review_ui.load_human_votes(),
+    imported directly (deferred, local import - same convention
+    judge_loop.py itself uses) rather than reimplemented, so this can
+    never quietly drift from the real supersede logic."""
+    from human_review_ui import load_human_votes
+    return load_human_votes()
+
+
+def _load_judge():
+    exam_runs = _read_jsonl(EXAM_HISTORY_PATH)
+    review_runs = _read_jsonl(REVIEW_HISTORY_PATH)
+    report_runs = _read_jsonl(REPORT_HISTORY_PATH)
+    latest_exam = exam_runs[-1] if exam_runs else None
+    latest_review = review_runs[-1] if review_runs else None
+    latest_report = report_runs[-1] if report_runs else None
+
+    human_votes = _load_judge_history_votes()
+    review_rows = []
+    for row in (latest_review or {}).get("rows", []):
+        review_rows.append(dict(row, human_verdict=human_votes.get(row.get("query_id"))))
+
+    # The "pool" a batch is sampled FROM is today's live Green+Amber
+    # queries, not some number baked into the review run itself - the
+    # live query log keeps growing, so this is read fresh every build,
+    # same as every other Live Queries KPI.
+    live_rows = _live_rows()
+    pool_n = sum(1 for r in live_rows if r["status_color"] in ("green", "amber"))
+
+    # KPIs reframed 2026-08-11 from "% the judge/human said supported"
+    # (not intuitive on its own - 33% supported sounds bad even when the
+    # sample is mostly Amber, where "unsupported" is the EXPECTED
+    # verdict) to "% agreement with the gates" - does this rater's read
+    # match what the automated gates already concluded? Judge's version
+    # reuses review_batch()'s own agrees_with_gates per row (the exact
+    # same rule --review already applies); human's version applies the
+    # identical formula - (verdict == "supported") == (gate_color ==
+    # "green") - to the human's vote instead, so the two numbers are
+    # directly comparable apples to apples.
+    judge_agree_n = sum(1 for r in review_rows if r.get("agrees_with_gates"))
+    human_voted_rows = [r for r in review_rows if r["human_verdict"]]
+    human_agree_n = sum(1 for r in human_voted_rows
+                         if (r["human_verdict"] == "supported") == (r.get("gate_color") == "green"))
+
+    kpi = {
+        "exam_passed": (latest_exam or {}).get("passed"),
+        "exam_accuracy_pct": round(100 * latest_exam["accuracy"]) if latest_exam else None,
+        "exam_bar_pct": round(100 * latest_exam["pass_bar"]) if latest_exam else None,
+        "exam_run_at": (latest_exam or {}).get("run_at"),
+        "exam_backend": (latest_exam or {}).get("judge_backend"),
+        "reviewed_n": len(review_rows),
+        "pool_n": pool_n,
+        "flagged_n": sum(1 for r in review_rows if r.get("flagged_for_human")),
+        "judge_agree_pct": round(100 * judge_agree_n / len(review_rows)) if review_rows else None,
+        "judge_agree_n": judge_agree_n,
+        "human_voted_n": len(human_voted_rows),
+        "human_agree_pct": round(100 * human_agree_n / len(human_voted_rows)) if human_voted_rows else None,
+        "human_agree_n": human_agree_n,
+        "kappa": (latest_report or {}).get("cohens_kappa"),
+        "compared_n": (latest_report or {}).get("compared_n"),
+        "agreement_pct": round(100 * latest_report["agreement_pct"])
+                          if (latest_report and latest_report.get("agreement_pct") is not None) else None,
+    }
+
+    return {
+        "kpi": kpi,
+        "exam_items": (latest_exam or {}).get("results", []),
+        "exam_run_at": (latest_exam or {}).get("run_at"),
+        "exam_runs_history": [
+            {"run_at": e.get("run_at"), "accuracy": e.get("accuracy"), "passed": e.get("passed"),
+             "correct": e.get("correct"), "total_items": e.get("total_items"),
+             "judge_backend": e.get("judge_backend")}
+            for e in exam_runs
+        ],
+        "review_rows": review_rows,
+        "review_run_at": (latest_review or {}).get("run_at"),
+        "disagreements": (latest_report or {}).get("disagreements", []),
+    }
 
 
 # =====================================================================
@@ -994,6 +1099,7 @@ button:disabled{opacity:.4;cursor:default}
 .num{flex:.25;color:var(--text-faint);font-variant-numeric:tabular-nums}
 .q{flex:2.1;padding-right:8px}
 .lc{flex:.5;text-align:center}
+.lc-wide{flex:.9;text-align:center}
 .diag{flex:2}
 .typepill{font-size:11px;color:var(--text-faint);border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:6px}
 .chip{font-size:11.5px;padding:3px 10px;border-radius:6px;display:inline-block;cursor:help}
@@ -1083,6 +1189,7 @@ button:disabled{opacity:.4;cursor:default}
         <button id="btn-live-tree" onclick="setLiveSource('tree')">Decision tree logic</button>
         <button id="btn-live-queries" class="active" onclick="setLiveSource('queries')">All queries</button>
         <button id="btn-live-trend" onclick="setLiveSource('trend')">Trend</button>
+        <button id="btn-live-batch" onclick="setLiveSource('batch')">Batch review</button>
       </div>
     </div>
 
@@ -1112,6 +1219,42 @@ button:disabled{opacity:.4;cursor:default}
     </div>
 
     <div class="tree-card" id="live-trend-view"></div>
+
+    <div id="live-batch-view" style="display:none">
+      <p class="sub" style="margin-bottom:1rem">A second, independent AI model checks whether a sample of real answers are actually supported by the evidence they cite - never running on live traffic until it first proves itself on a known-answer exam. It ONLY checks whether the answer's claims are backed by the evidence shown - it does NOT check whether the answer actually addresses the question that was asked. That's a real current limitation, not an oversight - a fully-cited answer to the wrong question would still score "supported" here.</p>
+      <div id="judge-kpis-1" class="kpis-review"></div>
+      <div id="judge-kpis-2" class="kpis-review"></div>
+
+      <h3>Live batch review - item by item</h3>
+      <p class="sub" id="judge-review-sub" style="margin-bottom:0.75rem"></p>
+      <div class="tablecard">
+        <div class="thead">
+          <div class="num">#</div>
+          <div class="q">Question</div>
+          <div class="lc-wide">Gate</div>
+          <div class="lc-wide">Judge</div>
+          <div class="lc-wide">Human</div>
+        </div>
+        <div id="judge-review-rows"></div>
+      </div>
+
+      <h3>Judge vs. human disagreements</h3>
+      <div id="judge-disagreements"></div>
+
+      <div id="judge-exam-section" style="display:none">
+        <h3>Entrance exam - item by item</h3>
+        <p class="sub" id="judge-exam-sub" style="margin-bottom:0.75rem"></p>
+        <div class="tablecard">
+          <div class="thead">
+            <div class="num">#</div>
+            <div class="q">Question</div>
+            <div class="diag">Method / result (click a row for full detail)</div>
+          </div>
+          <div id="judge-exam-rows"></div>
+        </div>
+        <div id="judge-exam-history"></div>
+      </div>
+    </div>
   </div>
 
   <div id="rlhf-tab" style="display:none">
@@ -1186,10 +1329,13 @@ function setLiveSource(s){
   document.getElementById('btn-live-tree').className = s==='tree' ? 'active' : '';
   document.getElementById('btn-live-queries').className = s==='queries' ? 'active' : '';
   document.getElementById('btn-live-trend').className = s==='trend' ? 'active' : '';
+  document.getElementById('btn-live-batch').className = s==='batch' ? 'active' : '';
   document.getElementById('live-queries-view').style.display = s==='queries' ? '' : 'none';
   document.getElementById('live-tree-view').style.display = s==='tree' ? 'block' : 'none';
   document.getElementById('live-trend-view').style.display = s==='trend' ? 'block' : 'none';
+  document.getElementById('live-batch-view').style.display = s==='batch' ? 'block' : 'none';
   if(s==='trend') renderLiveTrend();
+  if(s==='batch') renderJudgeBatch();
 }
 
 let rlhfSource = 'reviewed';
@@ -1394,8 +1540,8 @@ function mdToHtml(s){
   // A doubled dollar sign is Template's own escape for one literal
   // dollar sign - needed below for JS's regex capture-group reference,
   // and again further down for a regex end-of-line anchor.
-  var t = esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$$1</strong>');
-  var blocks = t.split(/\\n\s*\\n/);
+  var t = esc(s).replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$$1</strong>');
+  var blocks = t.split(/\\n\\s*\\n/);
   return blocks.map(function(block){
     // Line-by-line within the block, not "the whole block is a list or
     // it isn't" - a real answer often has a label line immediately
@@ -1411,7 +1557,7 @@ function mdToHtml(s){
       if (textBuf.length) { html += '<p>' + textBuf.join('<br>') + '</p>'; textBuf = []; }
     }
     lines.forEach(function(l){
-      var m = /^\s*-\s+(.*)$$/.exec(l);
+      var m = /^\\s*-\\s+(.*)$$/.exec(l);
       if (m) { flushText(); listBuf.push(m[1]); }
       else { flushList(); textBuf.push(l); }
     });
@@ -1630,6 +1776,138 @@ function jumpToRlhf(queryId){
 }
 
 // =====================================================================
+// CONTRARIAN JUDGE - "Batch review" sub-tab under Live Queries. See
+// _load_judge() in build_dashboard.py for how DATA.judge is built -
+// this just renders it. Reuses the same row/detail accordion pattern
+// as every other tab (_toggleDetail/openDetailEl above).
+// =====================================================================
+
+function verdictChip(v){
+  const cls = v === 'supported' ? 'green' : v === 'unsupported' ? 'red' : 'na';
+  return '<span class="chip '+cls+'">'+esc(v || 'not yet rated')+'</span>';
+}
+
+function judgeExamDetailHTML(item, i){
+  return '<div class="detail" id="jed'+i+'">'+
+    '<div class="dsection"><p class="dlabel">Method</p><p class="dtext">'+esc(item.method)+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Evidence shown to the judge</p><div class="quote">'+mdToHtml(item.evidence_text)+'</div></div>'+
+    '<div class="dsection"><p class="dlabel">Answer shown to the judge</p><div class="quote">'+mdToHtml(item.given_answer)+'</div></div>'+
+    '<div class="dsection"><p class="dlabel">True verdict (planted, judge never sees this)</p><p class="dtext">'+verdictChip(item.true_verdict)+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Judge verdict</p><p class="dtext">'+verdictChip(item.judge_verdict)+' '
+      +(item.correct ? '<span class="ok">&#10003; correct</span>' : '<span class="no">&#10007; wrong</span>')+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Judge reasoning</p><p class="dtext">'+esc(item.judge_reasoning || '')+'</p></div>'+
+  '</div>';
+}
+function toggleJudgeExam(i){ _toggleDetail(document.getElementById('jed'+i)); }
+
+function judgeReviewDetailHTML(row, i){
+  var humanLine = row.human_verdict
+    ? '<p class="dtext">'+verdictChip(row.human_verdict)+'</p>'
+    : '<p class="dtext">Not yet rated by a human - run human_review_ui.py.</p>';
+  return '<div class="detail" id="jrd'+i+'">'+
+    '<div class="dsection"><p class="dlabel">Gate colour (from the 4 automated gates)</p><p class="dtext"><span class="chip '+(row.gate_color||'na')+'">'+esc(row.gate_color||'')+'</span></p></div>'+
+    '<div class="dsection"><p class="dlabel">Evidence shown to the judge</p><div class="quote">'+mdToHtml(row.evidence_text)+'</div></div>'+
+    '<div class="dsection"><p class="dlabel">Answer given</p><div class="quote">'+mdToHtml(row.given_answer)+'</div></div>'+
+    '<div class="dsection"><p class="dlabel">Judge verdict</p><p class="dtext">'+verdictChip(row.judge_verdict)+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Judge reasoning</p><p class="dtext">'+esc(row.judge_reasoning || '')+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Human verdict</p>'+humanLine+'</div>'+
+    '<div class="dsection"><p class="dlabel">Agrees with the gates?</p><p class="dtext">'+(row.agrees_with_gates ? '<span class="ok">&#10003; yes</span>' : '<span class="no">&#10007; no - flagged for human adjudication</span>')+'</p></div>'+
+  '</div>';
+}
+function toggleJudgeReview(i){ _toggleDetail(document.getElementById('jrd'+i)); }
+
+function jumpToJudgeBatch(queryId){
+  setLiveSource('batch');
+  const rows = DATA.judge.review_rows;
+  const idx = rows.findIndex(function(r){ return r.query_id === queryId; });
+  if(idx < 0) return;
+  const rowEl = document.querySelectorAll('#judge-review-rows .row')[idx];
+  const detailEl = document.getElementById('jrd'+idx);
+  if(detailEl) _toggleDetail(detailEl);
+  if(rowEl && rowEl.scrollIntoView) rowEl.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function kappaReadout(kappa){
+  if(kappa === null || kappa === undefined) return 'not enough data yet';
+  // Landis & Koch (1977) standard interpretation bands.
+  var label = kappa < 0 ? 'poor' : kappa <= 0.20 ? 'slight' : kappa <= 0.40 ? 'fair'
+    : kappa <= 0.60 ? 'moderate' : kappa <= 0.80 ? 'substantial' : 'almost perfect';
+  return kappa.toFixed(2) + ' (' + label + ')';
+}
+
+function toggleJudgeExamSection(){
+  var el = document.getElementById('judge-exam-section');
+  el.style.display = (el.style.display === 'block') ? 'none' : 'block';
+}
+
+function renderJudgeBatch(){
+  const d = DATA.judge, k = d.kpi;
+
+  document.getElementById('judge-kpis-1').innerHTML =
+    '<div class="kpi '+(k.exam_passed ? 'c-green' : k.exam_passed === false ? 'c-red' : '')+'" style="cursor:pointer" onclick="toggleJudgeExamSection()">'
+      +'<p class="label">Entrance exam</p><p class="what">Click to see item-by-item exam results</p>'
+      +'<p class="value">'+(k.exam_run_at ? (k.exam_passed ? 'PASSED' : 'FAILED') : 'not run yet')+'</p>'
+      +'<p class="sub">'+(k.exam_run_at ? k.exam_accuracy_pct+'% (bar '+k.exam_bar_pct+'%)' : 'run judge_loop.py --exam')+'</p></div>'+
+    '<div class="kpi"><p class="label">Reviewed</p><p class="what">Of today\\'s eligible Green + Amber live queries</p>'
+      +'<p class="value">'+k.reviewed_n+'</p><p class="sub">of '+k.pool_n+' eligible</p></div>'+
+    '<div class="kpi"><p class="label">Judge agrees with gates</p><p class="what">Judge verdict matches the gate outcome</p>'
+      +'<p class="value">'+(k.judge_agree_pct===null?'-':k.judge_agree_pct+'%')+'</p><p class="sub">'+k.judge_agree_n+' / '+k.reviewed_n+' ('+k.flagged_n+' flagged)</p></div>';
+
+  document.getElementById('judge-kpis-2').innerHTML =
+    '<div class="kpi"><p class="label">Human agrees with gates</p><p class="what">Of cases a human has actually rated</p>'
+      +'<p class="value">'+(k.human_agree_pct===null?'-':k.human_agree_pct+'%')+'</p><p class="sub">'+k.human_agree_n+' / '+k.human_voted_n+' rated</p></div>'+
+    '<div class="kpi"><p class="label">Judge vs. human agreement</p><p class="what">Raw agreement, same cases only</p>'
+      +'<p class="value">'+(k.agreement_pct===null?'-':k.agreement_pct+'%')+'</p><p class="sub">'+(k.compared_n||0)+' compared</p></div>'+
+    '<div class="kpi"><p class="label">Cohen\\'s kappa</p><p class="what">Corrects raw agreement for chance</p>'
+      +'<p class="value">'+kappaReadout(k.kappa)+'</p><p class="sub">Landis &amp; Koch 1977 scale</p></div>';
+
+  document.getElementById('judge-review-sub').textContent = d.review_run_at
+    ? 'Latest batch: ' + d.review_run_at + ' - never includes Red queries (already quarantined for mandatory human review).'
+    : 'No live batch has been reviewed yet - run judge_loop.py --review (requires a passed exam first).';
+  document.getElementById('judge-review-rows').innerHTML = d.review_rows.map(function(row,i){
+    return '<div class="row" onclick="toggleJudgeReview('+i+')">'+
+      '<div class="rowline"><div class="num">'+(i+1)+'</div><div class="q">'+esc(row.question)+'</div>'+
+      '<div class="lc-wide"><span class="chip '+(row.gate_color||'na')+'">'+esc(row.gate_color||'')+'</span></div>'+
+      '<div class="lc-wide">'+verdictChip(row.judge_verdict)+'</div>'+
+      '<div class="lc-wide">'+(row.human_verdict ? verdictChip(row.human_verdict) : '<span class="chip na">-</span>')+'</div></div>'+
+      judgeReviewDetailHTML(row,i)+
+    '</div>';
+  }).join('');
+
+  document.getElementById('judge-exam-sub').textContent = d.exam_run_at
+    ? 'Latest run: ' + d.exam_run_at + ' - ' + d.exam_items.length + ' gold item(s), each built to have a KNOWN correct verdict the judge never sees.'
+    : 'No exam has been run yet.';
+  document.getElementById('judge-exam-rows').innerHTML = d.exam_items.map(function(item,i){
+    return '<div class="row" onclick="toggleJudgeExam('+i+')">'+
+      '<div class="rowline"><div class="num">'+(i+1)+'</div><div class="q">'+esc(item.question)+'</div>'+
+      '<div class="diag">'+esc(item.method)+' &middot; '+verdictChip(item.judge_verdict)
+        +(item.correct ? ' <span class="ok">&#10003;</span>' : ' <span class="no">&#10007;</span>')+'</div></div>'+
+      judgeExamDetailHTML(item,i)+
+    '</div>';
+  }).join('');
+
+  if(d.exam_runs_history && d.exam_runs_history.length > 1){
+    document.getElementById('judge-exam-history').innerHTML =
+      '<p class="dlabel" style="margin-top:1rem">Past exam runs</p><ul style="font-size:13px;color:var(--text-dim)">'
+      + d.exam_runs_history.slice().reverse().map(function(e){
+          return '<li>'+esc(e.run_at||'')+' - '+(e.passed?'PASSED':'FAILED')+' - '
+            +Math.round(100*(e.accuracy||0))+'% ('+e.correct+'/'+e.total_items+'), backend: '+esc(e.judge_backend||'')+'</li>';
+        }).join('')
+      + '</ul>';
+  } else {
+    document.getElementById('judge-exam-history').innerHTML = '';
+  }
+
+  document.getElementById('judge-disagreements').innerHTML = (d.disagreements && d.disagreements.length)
+    ? d.disagreements.map(function(dis){
+        return '<div class="row" style="cursor:pointer" onclick="jumpToJudgeBatch(\\''+esc(dis.query_id)+'\\')">'
+          +'<div class="rowline"><div class="q">Judge: '+verdictChip(dis.judge_verdict)+' &nbsp; Human: '+verdictChip(dis.human_verdict)+'</div>'
+          +'<div class="diag"><span class="linkpill">view case &rarr;</span></div></div></div>';
+      }).join('')
+    : '<p class="sub">None yet - either no batch has both a judge and a human verdict, or every rated case agreed.</p>';
+}
+
+// =====================================================================
 // RLHF FEEDBACK TAB - reviewed queries ONLY. Reuses the golden set's
 // own 6-leaf vocabulary/colours (r.leaf/r.color), reconstructed from a
 // rep's own read of a real answer - see _rlhf_leaf() in build_dashboard.py.
@@ -1747,7 +2025,8 @@ def build():
     agent = _load_source("agent_eval", "Test the agent (LLM)")
     system = _load_source("eval", "Test the system (regex)")
     live = _load_live()
-    data_json = json.dumps({"agent": agent, "system": system, "live": live})
+    judge = _load_judge()
+    data_json = json.dumps({"agent": agent, "system": system, "live": live, "judge": judge})
     html = _TEMPLATE.substitute(DATA_JSON=data_json, GOLDEN_TREE_SVG=golden_tree_svg(),
                                  LIVE_TREE_SVG=live_tree_svg(), RLHF_TREE_SVG=rlhf_tree_svg())
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
@@ -1756,6 +2035,11 @@ def build():
     print(f"  agent  run: {agent['run']}  ({len(agent['rows'])} questions)")
     print(f"  system run: {system['run']}  ({len(system['rows'])} questions)")
     print(f"  live queries: {len(live['rows'])} logged, {live['kpi']['reviewed_n']} reviewed")
+    if judge["exam_run_at"]:
+        print(f"  contrarian judge: exam {'PASSED' if judge['kpi']['exam_passed'] else 'FAILED'} "
+              f"({judge['kpi']['exam_accuracy_pct']}%), {judge['kpi']['reviewed_n']} live case(s) reviewed")
+    else:
+        print("  contrarian judge: no exam run yet - run judge_loop.py --exam")
 
 
 if __name__ == "__main__":

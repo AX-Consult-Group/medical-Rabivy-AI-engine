@@ -21,7 +21,8 @@ import hashlib
 import json
 import os
 
-from judge_loop import MockJudge, _parse_verdict, run_exam, GOLD_ITEMS_PATH, PASS_BAR
+from judge_loop import (MockJudge, _parse_verdict, run_exam, GOLD_ITEMS_PATH, PASS_BAR,
+                         _established_sentence, _find_synthesis_donor, _term_words)
 
 
 # =====================================================================
@@ -67,14 +68,38 @@ def test_parse_verdict_rejects_unexpected_verdict_value():
     assert parsed["verdict"] == "unsupported"
 
 
+def test_parse_verdict_strips_markdown_code_fence():
+    # Real bug found 2026-08-11: Claude sometimes wraps its JSON reply in
+    # a ```json ... ``` fence despite JUDGE_SYSTEM saying "ONLY a JSON
+    # object, no other text". json.loads() used to choke on the
+    # backticks and silently fall back to "unsupported" - invisible on
+    # every gold-item method except conversation_memory (true_verdict
+    # "supported"), where it wiped out 0/8. Covers both the labelled and
+    # unlabelled fence forms.
+    fenced = '```json\n{"verdict": "supported", "reasoning": "matches"}\n```'
+    parsed = _parse_verdict(fenced)
+    assert parsed["verdict"] == "supported"
+    assert parsed["reasoning"] == "matches"
+
+    fenced_no_lang = '```\n{"verdict": "supported", "reasoning": "matches"}\n```'
+    parsed2 = _parse_verdict(fenced_no_lang)
+    assert parsed2["verdict"] == "supported"
+
+
 # =====================================================================
 # --build-gold / --exam - scoring / pass-bar math
 # =====================================================================
 
-def test_exam_runs_end_to_end_in_mock_mode(monkeypatch):
+def test_exam_runs_end_to_end_in_mock_mode(tmp_path, monkeypatch):
     monkeypatch.setenv("JUDGE_BACKEND", "mock")
+    # Redirect the append-only history file - added 2026-08-11 alongside
+    # EXAM_HISTORY_PATH. Unlike EXAM_RESULT_PATH (a "latest" file this
+    # test already happily overwrites), history is NEVER pruned, so a
+    # mock run left un-redirected here would sit in the real history
+    # forever, polluting whatever a future dashboard reads from it.
+    import judge_loop
+    monkeypatch.setattr(judge_loop, "EXAM_HISTORY_PATH", str(tmp_path / "exam_history.jsonl"))
     if not os.path.exists(GOLD_ITEMS_PATH):
-        import judge_loop
         judge_loop.cmd_build_gold()
     summary = run_exam()
     assert summary["total_items"] > 0
@@ -92,12 +117,76 @@ def test_exam_fails_closed_with_zero_items(tmp_path, monkeypatch):
     # would incorrectly block --review from running for real (found by
     # hand: running this suite once did exactly that, before this fix).
     monkeypatch.setattr("judge_loop.EXAM_RESULT_PATH", str(tmp_path / "exam_result.json"))
+    monkeypatch.setattr("judge_loop.EXAM_HISTORY_PATH", str(tmp_path / "exam_history.jsonl"))
     monkeypatch.setenv("JUDGE_BACKEND", "mock")
     summary = run_exam()
     # Zero items must never read as "passed" - an empty exam proves
     # nothing, and a silent pass here would let an unproven judge
     # straight through to live traffic.
     assert summary["passed"] is False
+
+
+# =====================================================================
+# _established_sentence() / _find_synthesis_donor() - pure logic, no
+# real index/spreadsheet needed, so these run anywhere with fabricated
+# inputs. Added 2026-08-11 alongside the fixes for the real exam run
+# that found: (a) conversation_memory bare term-lists ("283.") read as
+# too cryptic for a judge to trust, and (b) a fixed-rotation synthesis
+# donor could accidentally share real terms with the correct chunk.
+# =====================================================================
+
+def test_established_sentence_uses_chunk_text_for_hardcoded_facts():
+    nf = {"facts": ["side effects", "cost"]}
+    chunk = {"text": "Patients discontinue due to side effects and cost."}
+    assert _established_sentence(nf, ["side effects", "cost"], chunk) == chunk["text"]
+
+
+def test_established_sentence_uses_state_label_for_live_state_facts():
+    nf = {"facts": None, "state": "Missouri"}
+    result = _established_sentence(nf, ["283"], {"text": "irrelevant"})
+    assert "Missouri" in result
+    assert "283" in result
+
+
+def test_established_sentence_uses_specialty_label_for_live_specialty_facts():
+    nf = {"facts": None, "specialty": "Endocrinology"}
+    result = _established_sentence(nf, [["1536", "1,536"], "37"], {"text": "irrelevant"})
+    assert "Endocrinology" in result
+    assert "1,536" in result
+    assert "37" in result
+
+
+def test_find_synthesis_donor_skips_a_donor_whose_terms_overlap_the_correct_chunk():
+    # competitive_switchers' facts ("monthly dosing") would overlap a
+    # correct chunk that itself already mentions "monthly dosing" - the
+    # real bug found 2026-08-11. The donor picker should skip past it to
+    # the next non-overlapping question rather than silently returning a
+    # donor whose answer isn't actually wrong.
+    class FakeGT:
+        NARRATIVE_FACTS = {
+            "a": {"facts": ["monthly dosing"]},
+            "b": {"facts": ["totally unrelated term"]},
+        }
+
+    narrative_qs = [{"narrative_key": "a"}, {"narrative_key": "b"}]
+    correct_chunk_text = "Our key message is monthly dosing convenience."
+    donor_key, donor_facts = _find_synthesis_donor(narrative_qs, FakeGT, "a", correct_chunk_text)
+    assert donor_key == "b"
+    assert donor_facts == ["totally unrelated term"]
+
+
+def test_find_synthesis_donor_returns_none_when_every_donor_overlaps():
+    class FakeGT:
+        NARRATIVE_FACTS = {
+            "a": {"facts": ["monthly dosing"]},
+            "b": {"facts": ["monthly dosing"]},
+        }
+
+    narrative_qs = [{"narrative_key": "a"}, {"narrative_key": "b"}]
+    correct_chunk_text = "Our key message is monthly dosing convenience."
+    donor_key, donor_facts = _find_synthesis_donor(narrative_qs, FakeGT, "a", correct_chunk_text)
+    assert donor_key is None
+    assert donor_facts is None
 
 
 def test_gold_items_include_conversation_memory_case():
