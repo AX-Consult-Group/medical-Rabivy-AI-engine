@@ -65,13 +65,15 @@ In this project, all of the above is synthetic data generated to look like the r
 
 **Layer 7 - what a rep actually opens.** `chat_ui.py` is a local web interface (`localhost:8017`) showing the answer plus pass/fail gates and a human review queue for failures, so nothing is a black box. It's local only - it runs on whichever machine starts it, not a shared server.
 
-**Layer 8 - logging every question and collecting an RLHF rating.** The same `chat_ui.py` logs every real question and answer it handles, and puts a widget under each delivered answer asking the rep whether it was right. This is log-and-display only - nothing here retrains or fine-tunes any model; it's the raw material a future rating/training loop would need, not that loop itself.
+**Layer 8 - logging every question and collecting a user feedback rating.** The same `chat_ui.py` logs every real question and answer it handles, and puts a widget under each delivered answer asking the rep whether it was right. This is log-and-display only - nothing here retrains or fine-tunes any model; it's the raw material a future rating/training loop would need, not that loop itself.
 
-**Layer 9 - turning all of that into one dashboard.** `build_dashboard.py` reads the golden-set results in `eval_runs/` (Layer 5) plus the live query/RLHF logs (Layer 8), and writes one page, `dashboard.html`, with three tabs: golden-set results, every live question, and every rep rating.
+An optional offshoot of this layer, not a step in the main pipeline: `judge_loop.py` + `human_review_ui.py` batch-review a random sample of that same live traffic with a second AI pass, after the judge proves itself on a 90%+ entrance exam. It rereads live queries straight from Layer 8's log, the same source `chat_ui.py` writes to - not something Layer 9 produces - and its verdicts get compared against a human rater's, blind, via Cohen's kappa. See the file table below and the "Agent batch review" step in Running It.
+
+**Layer 9 - turning all of that into one dashboard.** `build_dashboard.py` reads the golden-set results in `eval_runs/` (Layer 5) plus the live query/user feedback logs (Layer 8), and writes one page, `dashboard.html`, with three tabs: golden-set results, every live question, and every rep rating.
 
 **Standalone - real, but not part of either path above.** `propensity_model.py` encodes the scoring formula as runnable code; `main.py` runs it automatically before building anything (Stage 0), so a stale or wrong score gets caught immediately rather than silently flowing downstream. `challenger_validation.py` checks `propensity_model.py`'s scores against real (or simulated) outcomes, and separately trains its own data-driven model to flag patterns the hand-built scorecard might be missing. `intel_digest.py` is a separate loop entirely: turns a batch of incoming external signals (conference abstracts, publications, regulatory readouts, payer/market news) into a ranked, email-ready briefing, then ingests the items into the knowledge repository so the conversational agent can answer questions about them afterwards - feed, triage, digest, ingest.
 
-Alongside the code, four rendered write-ups are published via GitHub Pages: the [Project Write-Up](https://ax-consult-group.github.io/medical-Rabivy-AI-engine/index.html) (`index.html`) and [Evaluation Suite](https://ax-consult-group.github.io/medical-Rabivy-AI-engine/evals.html) (`evals.html`) linked above, plus `maintenance_dashboard.html` and `live_queries_&_RLHF.html`, covering the dashboard and the live-query/RLHF system respectively. All four are rendered separately and copied in - not built by any script in this repo.
+Alongside the code, five pages sit at the repo root, matching the five nav tabs on the live site: the [Project Write-Up](https://ax-consult-group.github.io/medical-Rabivy-AI-engine/index.html) (`index.html`) and [Evaluation Suite](https://ax-consult-group.github.io/medical-Rabivy-AI-engine/evals.html) (`evals.html`) linked above, plus the [Dashboard Write-Up](https://ax-consult-group.github.io/medical-Rabivy-AI-engine/maintenance_dashboard.html) (`maintenance_dashboard.html`) and [Live Queries and User Feedback](https://ax-consult-group.github.io/medical-Rabivy-AI-engine/live_queries_&_user_feedback.html) (`live_queries_&_user_feedback.html`) write-ups. Those four are Quarto documents, rendered separately and copied in - not built by any script in this repo. The fifth, the [Maintenance Dashboard](https://ax-consult-group.github.io/medical-Rabivy-AI-engine/dashboard.html) (`dashboard.html`), is different: it's generated directly by `build_dashboard.py` (Layer 9) from this repo's own eval/live-query data, not hand-written or copied in from elsewhere.
 
 ---
 
@@ -102,9 +104,11 @@ Alongside the code, four rendered write-ups are published via GitHub Pages: the 
 | `eval_runs/` folder | 5 (eval output) | One JSON snapshot per eval run; read by `build_dashboard.py` for the trend/golden-set tabs |
 | `llm_client.py` | 6 | The real interface to Claude (or a free offline stand-in) |
 | `agent.py` | 6 | Orchestrator - tool loop, answer synthesis, self-audit |
-| `chat_ui.py` | 7, 8 | Local web interface showing the answer plus its evidence (7); logs every question/answer and collects a rep RLHF rating on each one (8) |
-| `build_dashboard.py` | 9 | Reads `eval_runs/` + the live query/RLHF logs, writes `dashboard.html` |
-| `dashboard.html` | 9 (output) | Generated by `build_dashboard.py` - golden-set trend, live queries, and RLHF ratings in one page |
+| `chat_ui.py` | 7, 8 | Local web interface showing the answer plus its evidence (7); logs every question/answer and collects a rep user feedback rating on each one (8) |
+| `judge_loop.py` | 8 (offshoot) | A second AI pass that batch-reviews a random sample of live Green/Amber queries (Red is already mandatory for human review) after scoring 90%+ on a gold-standard entrance exam; reruns the hallucination audit blind and compares its verdict against a human rater via Cohen's kappa |
+| `human_review_ui.py` | 8 (offshoot) | Local web page (`localhost:8019`) for a human to blind-rate the same batch `judge_loop.py --review` reviews, so the two sets of verdicts can be compared |
+| `build_dashboard.py` | 9 | Reads `eval_runs/` + the live query/user feedback logs, writes `dashboard.html` |
+| `dashboard.html` | 9 (output) | Generated by `build_dashboard.py` - golden-set trend, live queries, and user feedback ratings in one page |
 | `embedding_backend.py` | standalone | Shared fallback so build and query never use mismatched embedding models |
 | `propensity_model.py` | standalone | The scoring formula as code; guards `main.py` against stale scores |
 | `challenger_validation.py` | standalone | Checks the scorecard against real outcomes and a learned model |
@@ -112,7 +116,7 @@ Alongside the code, four rendered write-ups are published via GitHub Pages: the 
 | `index.html` | standalone (docs) | Rendered Project Write-Up, published via GitHub Pages |
 | `evals.html` | standalone (docs) | Rendered Evaluation Suite write-up, published via GitHub Pages |
 | `maintenance_dashboard.html` | standalone (docs) | Rendered write-up on the maintenance dashboard, published via GitHub Pages |
-| `live_queries_&_RLHF.html` | standalone (docs) | Rendered write-up on the live query + RLHF logging system, published via GitHub Pages |
+| `live_queries_&_user_feedback.html` | standalone (docs) | Rendered write-up on the live query + user feedback logging system, published via GitHub Pages |
 | `PROJECT_BRIEF.md` | standalone (docs) | Original project scope doc this build was scoped against |
 | `requirements.txt` | standalone (meta) | Python dependency list (`pip install -r requirements.txt`) |
 | `figures/` folder | standalone (meta) | Diagram source files, incl. the pipeline schematic above |
@@ -167,13 +171,25 @@ python test_the_articles.py             # same 3-layer check, against real publi
 
 Not needed to demo the product itself - these check whether it's actually working, and each run writes a fresh results file to `eval_runs/`. `test_retrieval_ranking.py` and `test_article_retrieval.py` never touch the LLM at all, so those two are always free regardless of whether a key is set.
 
-**5. Build the dashboard - optional, run this last, after the evals.**
+**5. Agent batch review - optional, uses API credits.**
+
+```bash
+python judge_loop.py --build-gold       # first run only: builds the entrance exam from the golden 30
+python judge_loop.py --exam             # scores the judge agent against that exam
+python judge_loop.py --review           # if it passed 90%+, batch-reviews a sample of live Green/Amber queries
+python human_review_ui.py               # optional: rate the same batch by hand, blind, at http://localhost:8019
+python judge_loop.py --report           # Cohen's kappa between the judge and the human, once both exist
+```
+
+Not needed to demo the product itself - a second AI pass that spot-checks the hallucination audit gate against a random sample of real, already-answered Green/Amber live queries (Red queries are already mandatory for human review, so there's nothing extra to check there). The judge has to score at least 90% on the entrance exam before it's trusted to review anything real. Results, plus the optional human comparison, show up on the dashboard's Batch review view - run `build_dashboard.py` (step 6) after this if you want them reflected there.
+
+**6. Build the dashboard - optional, run this last, after the evals and the agent batch review.**
 
 ```bash
 python build_dashboard.py
 ```
 
-Reads whatever's currently sitting in `eval_runs/`, plus the live query/RLHF logs, and writes `dashboard.html`. Run the evals (step 4) first if you want the dashboard's golden-test numbers to reflect a current run - this script only reads what's already there, it doesn't run anything itself.
+Reads whatever's currently sitting in `eval_runs/`, plus the live query/user feedback logs and any judge_loop/human_review_ui results, and writes `dashboard.html`. Run the evals (step 4) and the agent batch review (step 5) first if you want the dashboard's numbers to reflect a current run - this script only reads what's already there, it doesn't run anything itself.
 
 ---
 

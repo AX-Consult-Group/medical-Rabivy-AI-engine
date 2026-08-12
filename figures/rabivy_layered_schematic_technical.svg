@@ -242,16 +242,16 @@
 <text x="832" y="1847" font-size="10" font-style="italic" fill="#A85D12">Watch: local only (localhost) - it</text>
 <text x="832" y="1862" font-size="10" font-style="italic" fill="#A85D12">only runs on whoever's machine starts it</text>
 
-<!-- chat_ui.py -> live logging + RLHF -->
+<!-- chat_ui.py -> live logging + user feedback -->
 <line x1="930" y1="1900" x2="930" y2="2000" stroke="#D85A30" stroke-width="2.5" marker-end="url(#arrowRed)"/>
 
-<!-- ===================== LAYER 8: chat_ui.py's logging + RLHF endpoints ===================== -->
-<text x="40" y="1978" font-size="12.5" font-weight="700" fill="#3D3870">Layer 8 - chat_ui.py logs every question and collects an RLHF rating</text>
+<!-- ===================== LAYER 8: chat_ui.py's logging + user feedback endpoints ===================== -->
+<text x="40" y="1978" font-size="12.5" font-weight="700" fill="#3D3870">Layer 8 - chat_ui.py logs every question and collects a user feedback rating</text>
 <rect x="820" y="2000" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="820" y="2000" width="220" height="6" fill="#D85A30"/>
 <circle cx="1040" cy="2000" r="18" fill="#D85A30"/>
 <text x="1040" y="2005" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">15</text>
-<text x="832" y="2046" font-size="13.5" font-weight="700" fill="#3D3870">chat_ui.py (logging + RLHF)</text>
+<text x="832" y="2046" font-size="13.5" font-weight="700" fill="#3D3870">Logging &amp; feedback</text>
 <text x="832" y="2060" font-size="11" fill="#5A52B8">Logs every real question and</text>
 <text x="832" y="2076" font-size="11" fill="#5A52B8">answer chat_ui.py handles. Under</text>
 <text x="832" y="2092" font-size="11" fill="#5A52B8">each delivered answer, a widget</text>
@@ -266,7 +266,7 @@
 <rect x="820" y="2270" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="820" y="2270" width="220" height="6" fill="#D85A30"/>
 <circle cx="1040" cy="2270" r="18" fill="#D85A30"/>
-<text x="1040" y="2275" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">16</text>
+<text x="1040" y="2275" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">17</text>
 <text x="832" y="2316" font-size="13.5" font-weight="700" fill="#3D3870">build_dashboard.py</text>
 <text x="832" y="2330" font-size="11" fill="#5A52B8">Builds one dashboard page, three</text>
 <text x="832" y="2346" font-size="11" fill="#5A52B8">tabs: golden-set results (steps</text>
@@ -274,6 +274,20 @@
 <text x="832" y="2378" font-size="11" fill="#5A52B8">and every rep rating.</text>
 <text x="832" y="2403" font-size="10" font-style="italic" fill="#A85D12">Watch: chat_ui.py also relies on</text>
 <text x="832" y="2418" font-size="10" font-style="italic" fill="#A85D12">this file directly, not just a report</text>
+
+<!-- ===================== Agent Batch Review - judge_loop.py + human_review_ui.py. An OFFSHOOT of Layer 8 (it batch-reviews live queries straight from chat_ui.py's log/box 15), not something Layer 9 produces - branches off the same log line box 15 receives, sits beside it, not beside build_dashboard.py ===================== -->
+<path d="M930,1950 H670 V2000" fill="none" stroke="#D85A30" stroke-width="2.5" marker-end="url(#arrowRed)"/>
+
+<rect x="560" y="2000" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="560" y="2000" width="220" height="6" fill="#D85A30"/>
+<circle cx="780" cy="2000" r="18" fill="#D85A30"/>
+<text x="780" y="2005" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">16</text>
+<text x="572" y="2046" font-size="13.5" font-weight="700" fill="#3D3870">judge_loop.py</text>
+<text x="572" y="2060" font-size="11" fill="#5A52B8">Passes a 90% entrance exam,</text>
+<text x="572" y="2076" font-size="11" fill="#5A52B8">then batch-reviews a sample of</text>
+<text x="572" y="2092" font-size="11" fill="#5A52B8">Green/Amber queries vs. a human.</text>
+<text x="572" y="2117" font-size="10" font-style="italic" fill="#A85D12">Watch: human_review_ui.py is the</text>
+<text x="572" y="2132" font-size="10" font-style="italic" fill="#A85D12">separate blind-rating companion page</text>
 
 <!-- ===================== STANDALONE - not part of either path ===================== -->
 <text x="40" y="2518" font-size="12.5" font-weight="700" fill="#3D3870">Standalone - not part of either path above</text>
