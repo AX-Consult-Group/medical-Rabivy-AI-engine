@@ -9,11 +9,11 @@
 #
 # STATUS: all three tabs are built. "Golden test set" reads the latest
 # test_the_agent.py and test_the_system.py runs, tags every question,
-# and renders a filterable, expandable page. "Live queries" and "RLHF
-# feedback" read from output/QUERY_LOG/ and output/RLHF_FEEDBACK/. All
+# and renders a filterable, expandable page. "Live queries" and "User
+# feedback" read from output/QUERY_LOG/ and output/USER_FEEDBACK/. All
 # three also have a Trend view - a day-by-day red/amber/green count,
 # built from every historical eval_runs/ file for Golden, and from the
-# logs' own timestamps for Live/RLHF.
+# logs' own timestamps for Live/User feedback.
 #
 # Run:  python build_dashboard.py
 # Writes: dashboard.html (repo root, alongside evals.html/index.html
@@ -321,31 +321,40 @@ def _golden_trend(series):
 
 
 # =====================================================================
-# LIVE QUERIES + RLHF FEEDBACK - two DIFFERENT tabs, built from the same
+# LIVE QUERIES + USER FEEDBACK - two DIFFERENT tabs, built from the same
 # joined data but deliberately NOT merged into one:
 #
-#   Live Queries  - EVERY real query chat_ui.py has handled, classified
-#                   ONLY by the 4 automated gates (Tool grounding /
-#                   Retrieval confidence / Source citations /
-#                   Hallucination audit). This is the live-query decision
-#                   tree's own logic - it has no opinion on whether an
-#                   answer was actually CORRECT, only whether the 4
-#                   mechanical checks passed. Every query gets a row here,
-#                   reviewed or not.
-#   RLHF feedback - ONLY queries a rep has actually reviewed. Reuses the
-#                   SAME 6-leaf vocabulary as the golden test set
-#                   (Correct answer / Synthesis issue / Correct anyway /
-#                   Correctly rejected / Retrieval fail / Hallucination),
-#                   since a rep's review reconstructs those same leaves
-#                   for a query where ground truth isn't known up front.
+#   Live Queries   - EVERY real query chat_ui.py has handled, classified
+#                    ONLY by the 4 automated gates (Tool grounding /
+#                    Retrieval confidence / Source citations /
+#                    Hallucination audit). This is the live-query decision
+#                    tree's own logic - it has no opinion on whether an
+#                    answer was actually CORRECT, only whether the 4
+#                    mechanical checks passed. Every query gets a row here,
+#                    reviewed or not.
+#   User feedback  - ONLY queries a rep has actually reviewed. Reuses the
+#                    SAME 6-leaf vocabulary as the golden test set
+#                    (Correct answer / Synthesis issue / Correct anyway /
+#                    Correctly rejected / Retrieval fail / Hallucination),
+#                    since a rep's review reconstructs those same leaves
+#                    for a query where ground truth isn't known up front.
 #
 # A KPI box on the Live Queries tab shows what fraction of all queries
-# have been picked up by RLHF yet, so the two tabs stay visibly linked
-# without being the same table.
+# have been picked up by user feedback yet, so the two tabs stay visibly
+# linked without being the same table.
 # =====================================================================
 
 QUERY_LOG_PATH = os.path.join("output", "QUERY_LOG", "query_log.jsonl")
-RLHF_LOG_PATH = os.path.join("output", "RLHF_FEEDBACK", "rlhf_log.jsonl")
+USER_FEEDBACK_LOG_PATH = os.path.join("output", "USER_FEEDBACK", "user_feedback_log.jsonl")
+
+# judge_loop.py's own output - see that file for what writes these.
+# Deliberately redefined here rather than imported from judge_loop.py,
+# same self-contained-file convention QUERY_LOG_PATH/USER_FEEDBACK_LOG_PATH
+# above already follow (this file doesn't import chat_ui.py either).
+LABEL_LOOP_DIR = os.path.join("output", "LABEL_LOOP")
+EXAM_HISTORY_PATH = os.path.join(LABEL_LOOP_DIR, "exam_history.jsonl")
+REVIEW_HISTORY_PATH = os.path.join(LABEL_LOOP_DIR, "review_history.jsonl")
+REPORT_HISTORY_PATH = os.path.join(LABEL_LOOP_DIR, "report_history.jsonl")
 
 # Each gate's OWN failure severity - these are NOT uniform, but only ONE
 # of them is actually red. Reconciled 2026-08-07: "Source citations"
@@ -388,7 +397,7 @@ def _worst_color(colors):
 
 def _live_status(gate_rows):
     """Gate-only status text + colour for the Live Queries tab - NEVER
-    consults RLHF. "Clean" if all 4 passed, otherwise names exactly
+    consults user feedback. "Clean" if all 4 passed, otherwise names exactly
     which gate(s) failed or weren't checked, coloured by the worst one."""
     failed = [g["name"] for g in gate_rows if g["ok"] is False]
     unchecked = [g["name"] for g in gate_rows if g["ok"] is None]
@@ -419,8 +428,8 @@ _LEGACY_RATING_COLOR = {"correct": "green", "partial": "amber",
                          "wrong": "red", "incorrect": "red", "vague": "amber"}
 
 
-def _rlhf_leaf(rating, evidence_answer, is_decline):
-    """Same rule chat_ui.py's _rlhf_leaf uses (kept in sync manually -
+def _user_feedback_leaf(rating, evidence_answer, is_decline):
+    """Same rule chat_ui.py's _user_feedback_leaf uses (kept in sync manually -
     different runtime, can't share the import) - mirrors classify()'s
     6-leaf golden-set logic from a rep's (rating, evidence_answer)
     pair. Recomputed HERE from the log's raw fields every time the
@@ -448,16 +457,16 @@ def _live_rows():
     """One row per logged query, newest first. Every row always carries
     a gate-only status/status_color (drives the Live Queries tab) plus,
     when a rep has reviewed it, a separately-computed leaf/color (drives
-    the RLHF feedback tab). Handles BOTH RLHF log formats: the rich
-    post-rewrite schema (enough raw fields to recompute a real leaf via
-    _rlhf_leaf) and the older bare {rating, note} entries from before
+    the User Feedback tab). Handles BOTH user feedback log formats: the
+    rich post-rewrite schema (enough raw fields to recompute a real leaf
+    via _user_feedback_leaf) and the older bare {rating, note} entries from before
     that rewrite, which only get a plain rating-based colour."""
     queries = _read_jsonl(QUERY_LOG_PATH)
-    rlhf_by_qid = {}
-    for e in _read_jsonl(RLHF_LOG_PATH):
+    feedback_by_qid = {}
+    for e in _read_jsonl(USER_FEEDBACK_LOG_PATH):
         qid = e.get("query_id")
         if qid:
-            rlhf_by_qid[qid] = e  # last rating wins if rated twice
+            feedback_by_qid[qid] = e  # last rating wins if rated twice
 
     rows = []
     for n, q in enumerate(queries, start=1):
@@ -466,31 +475,31 @@ def _live_rows():
                       "detail": g.get("detail"), "color": _gate_color(g)} for g in gates]
         status, status_color = _live_status(gate_rows)
 
-        rlhf = rlhf_by_qid.get(q.get("query_id"))
-        reviewed = rlhf is not None
+        feedback = feedback_by_qid.get(q.get("query_id"))
+        reviewed = feedback is not None
         leaf = color = None
-        rlhf_detail = None
+        feedback_detail = None
         if reviewed:
-            if "evidence_answer" in rlhf:
+            if "evidence_answer" in feedback:
                 # New-format entry - enough raw fields to recompute a
                 # real leaf. Decline detection is recomputed from the
                 # stored answer text via the SAME _is_decline used for
                 # the golden set, not a trusted stored flag.
-                answer_text = rlhf.get("answer") or q.get("answer") or ""
+                answer_text = feedback.get("answer") or q.get("answer") or ""
                 is_decline = _is_decline(answer_text)
-                leaf, color = _rlhf_leaf(rlhf.get("rating"), rlhf.get("evidence_answer"), is_decline)
+                leaf, color = _user_feedback_leaf(feedback.get("rating"), feedback.get("evidence_answer"), is_decline)
             else:
                 # Legacy pre-rewrite entry - only a bare rating, no
                 # answer/evidence to recompute anything from.
-                leaf = (rlhf.get("rating") or "reviewed").title() + " (legacy rating, no detail)"
-                color = _LEGACY_RATING_COLOR.get(rlhf.get("rating"), "amber")
-            rlhf_detail = {
-                "rating": rlhf.get("rating"),
-                "evidence_answer": rlhf.get("evidence_answer"),
-                "confirmed_chunk_id": rlhf.get("confirmed_chunk_id"),
-                "confirmed_chunk_rank": rlhf.get("confirmed_chunk_rank"),
-                "note": rlhf.get("note"),
-                "rated_at": rlhf.get("rated_at"),
+                leaf = (feedback.get("rating") or "reviewed").title() + " (legacy rating, no detail)"
+                color = _LEGACY_RATING_COLOR.get(feedback.get("rating"), "amber")
+            feedback_detail = {
+                "rating": feedback.get("rating"),
+                "evidence_answer": feedback.get("evidence_answer"),
+                "confirmed_chunk_id": feedback.get("confirmed_chunk_id"),
+                "confirmed_chunk_rank": feedback.get("confirmed_chunk_rank"),
+                "note": feedback.get("note"),
+                "rated_at": feedback.get("rated_at"),
             }
         rows.append({
             "n": n,
@@ -503,7 +512,7 @@ def _live_rows():
             "status": status, "status_color": status_color,
             "reviewed": reviewed,
             "leaf": leaf, "color": color,
-            "rlhf": rlhf_detail,
+            "user_feedback": feedback_detail,
             # Added 2026-08-07 alongside chat_ui.py's preceding_context
             # logging - rows written before that change simply won't have
             # this key, so .get() with a [] default rather than assuming
@@ -518,7 +527,7 @@ def _live_rows():
 
 def _live_kpi(rows):
     """Gate-only KPIs for the Live Queries tab - red/amber/green here
-    come from status_color (the 4 gates), never from an RLHF leaf."""
+    come from status_color (the 4 gates), never from a user feedback leaf."""
     total = len(rows) or 1
 
     def gate_stat(name):
@@ -546,8 +555,8 @@ def _live_kpi(rows):
     }
 
 
-def _rlhf_kpi(rows):
-    """Leaf-colour KPIs for the RLHF feedback tab - reviewed queries
+def _user_feedback_kpi(rows):
+    """Leaf-colour KPIs for the User Feedback tab - reviewed queries
     only. red/amber/green here come from the rep-reconstructed 6-leaf
     classification, never from the raw gates."""
     reviewed_rows = [r for r in rows if r["reviewed"]]
@@ -568,8 +577,8 @@ def _live_trend(rows):
     """Day-by-day green/amber/red counts for the Live Queries tab,
     grouped by when each question was actually ASKED (asked_at) -
     every logged query counts here, reviewed or not, same as the tab
-    itself. Colour comes from status_color (the 4 gates), never an
-    RLHF leaf."""
+    itself. Colour comes from status_color (the 4 gates), never a
+    user feedback leaf."""
     by_day = {}
     for r in rows:
         date = (r.get("asked_at") or "")[:10]
@@ -580,8 +589,8 @@ def _live_trend(rows):
     return sorted(by_day.values(), key=lambda d: d["date"])
 
 
-def _rlhf_trend(rows):
-    """Day-by-day green/amber/red counts for the RLHF feedback tab,
+def _user_feedback_trend(rows):
+    """Day-by-day green/amber/red counts for the User Feedback tab,
     grouped by when the REVIEW happened (rated_at) - not when the
     question was originally asked, since a rep can review a question
     days after it was logged. Reviewed queries only, colour from the
@@ -590,7 +599,7 @@ def _rlhf_trend(rows):
     for r in rows:
         if not r["reviewed"]:
             continue
-        date = ((r.get("rlhf") or {}).get("rated_at") or "")[:10]
+        date = ((r.get("user_feedback") or {}).get("rated_at") or "")[:10]
         if not date:
             continue
         _day_bucket(by_day, date)[r["color"]] += 1
@@ -601,8 +610,103 @@ def _rlhf_trend(rows):
 def _load_live():
     rows = _live_rows()
     return {"label": "Live queries", "kpi": _live_kpi(rows),
-            "rlhf_kpi": _rlhf_kpi(rows), "rows": rows,
-            "live_trend": _live_trend(rows), "rlhf_trend": _rlhf_trend(rows)}
+            "user_feedback_kpi": _user_feedback_kpi(rows), "rows": rows,
+            "live_trend": _live_trend(rows), "user_feedback_trend": _user_feedback_trend(rows)}
+
+
+# =====================================================================
+# CONTRARIAN JUDGE - "Batch review" sub-tab under Live Queries
+# ---------------------------------------------------------------------
+# Reads judge_loop.py's three append-only history logs (never the
+# "latest" snapshot files judge_loop.py itself overwrites each run -
+# see EXAM_HISTORY_PATH/REVIEW_HISTORY_PATH/REPORT_HISTORY_PATH's own
+# comments in judge_loop.py) plus human_review_ui.py's human_votes.jsonl,
+# and merges them into one item-by-item, fully expandable view: every
+# gold-item exam result, every sampled live case with its judge verdict
+# AND human verdict side by side, and the kappa comparison. Lives under
+# the Live Queries tab (not its own top-level tab) because it only ever
+# reviews live queries - it's a deeper QA lens on that same data, the
+# same relationship User Feedback already has to Live Queries.
+# =====================================================================
+
+def _load_judge_history_votes():
+    """{query_id: verdict} from human_votes.jsonl, latest vote per
+    query_id wins - identical rule to human_review_ui.load_human_votes(),
+    imported directly (deferred, local import - same convention
+    judge_loop.py itself uses) rather than reimplemented, so this can
+    never quietly drift from the real supersede logic."""
+    from human_review_ui import load_human_votes
+    return load_human_votes()
+
+
+def _load_judge():
+    exam_runs = _read_jsonl(EXAM_HISTORY_PATH)
+    review_runs = _read_jsonl(REVIEW_HISTORY_PATH)
+    report_runs = _read_jsonl(REPORT_HISTORY_PATH)
+    latest_exam = exam_runs[-1] if exam_runs else None
+    latest_review = review_runs[-1] if review_runs else None
+    latest_report = report_runs[-1] if report_runs else None
+
+    human_votes = _load_judge_history_votes()
+    review_rows = []
+    for row in (latest_review or {}).get("rows", []):
+        review_rows.append(dict(row, human_verdict=human_votes.get(row.get("query_id"))))
+
+    # The "pool" a batch is sampled FROM is today's live Green+Amber
+    # queries, not some number baked into the review run itself - the
+    # live query log keeps growing, so this is read fresh every build,
+    # same as every other Live Queries KPI.
+    live_rows = _live_rows()
+    pool_n = sum(1 for r in live_rows if r["status_color"] in ("green", "amber"))
+
+    # KPIs reframed 2026-08-11 from "% the judge/human said supported"
+    # (not intuitive on its own - 33% supported sounds bad even when the
+    # sample is mostly Amber, where "unsupported" is the EXPECTED
+    # verdict) to "% agreement with the gates" - does this rater's read
+    # match what the automated gates already concluded? Judge's version
+    # reuses review_batch()'s own agrees_with_gates per row (the exact
+    # same rule --review already applies); human's version applies the
+    # identical formula - (verdict == "supported") == (gate_color ==
+    # "green") - to the human's vote instead, so the two numbers are
+    # directly comparable apples to apples.
+    judge_agree_n = sum(1 for r in review_rows if r.get("agrees_with_gates"))
+    human_voted_rows = [r for r in review_rows if r["human_verdict"]]
+    human_agree_n = sum(1 for r in human_voted_rows
+                         if (r["human_verdict"] == "supported") == (r.get("gate_color") == "green"))
+
+    kpi = {
+        "exam_passed": (latest_exam or {}).get("passed"),
+        "exam_accuracy_pct": round(100 * latest_exam["accuracy"]) if latest_exam else None,
+        "exam_bar_pct": round(100 * latest_exam["pass_bar"]) if latest_exam else None,
+        "exam_run_at": (latest_exam or {}).get("run_at"),
+        "exam_backend": (latest_exam or {}).get("judge_backend"),
+        "reviewed_n": len(review_rows),
+        "pool_n": pool_n,
+        "flagged_n": sum(1 for r in review_rows if r.get("flagged_for_human")),
+        "judge_agree_pct": round(100 * judge_agree_n / len(review_rows)) if review_rows else None,
+        "judge_agree_n": judge_agree_n,
+        "human_voted_n": len(human_voted_rows),
+        "human_agree_pct": round(100 * human_agree_n / len(human_voted_rows)) if human_voted_rows else None,
+        "human_agree_n": human_agree_n,
+        "kappa": (latest_report or {}).get("cohens_kappa"),
+        "compared_n": (latest_report or {}).get("compared_n"),
+        "agreement_pct": round(100 * latest_report["agreement_pct"])
+                          if (latest_report and latest_report.get("agreement_pct") is not None) else None,
+    }
+
+    return {
+        "kpi": kpi,
+        "exam_items": (latest_exam or {}).get("results", []),
+        "exam_run_at": (latest_exam or {}).get("run_at"),
+        "exam_runs_history": [
+            {"run_at": e.get("run_at"), "accuracy": e.get("accuracy"), "passed": e.get("passed"),
+             "correct": e.get("correct"), "total_items": e.get("total_items"),
+             "judge_backend": e.get("judge_backend")}
+            for e in exam_runs
+        ],
+        "review_rows": review_rows,
+        "review_run_at": (latest_review or {}).get("run_at"),
+    }
 
 
 # =====================================================================
@@ -849,19 +953,19 @@ def live_tree_svg():
 
 
 # =====================================================================
-# RLHF PROMPT-FLOW DIAGRAM - not classify() output this time, but the
-# actual sequence of prompts chat_ui.py's rlhfHtml()/wireRlhf() shows a
+# USER FEEDBACK PROMPT-FLOW DIAGRAM - not classify() output this time, but the
+# actual sequence of prompts chat_ui.py's userFeedbackHtml()/wireUserFeedback() shows a
 # rep, approved as a mockup before being built in here. Matches the
 # real code exactly: the root gate ("did it surface an answer or
 # decline") is auto-detected from the answer text, never shown to the
 # rep - every other box IS a real prompt or button. "leaf" here means
-# "nothing more is asked after this" (matches _rlhf_leaf's terminal
+# "nothing more is asked after this" (matches _user_feedback_leaf's terminal
 # cases), not "this is one of the 6 golden-tree names" - Correct/
 # Partial/Incorrect keep going to the evidence question, so they're
 # drawn as intermediate (thin border) even though they're colour-coded.
 # =====================================================================
 
-_RLHF_TREE_BOXES = {
+_USER_FEEDBACK_TREE_BOXES = {
     "root":   dict(x=678, y=20,  w=280, h=90,  kind="neutral", leaf=False,
                     title="Did the engine surface an answer?",
                     sub="Auto-detected from the answer's own wording - not asked"),
@@ -907,7 +1011,7 @@ _RLHF_TREE_BOXES = {
     "chunk_pk":  dict(x=210, y=950, w=180, h=90, kind="neutral", leaf=True, title="Choose from chunks surfaced", sub=""),
 }
 
-_RLHF_TREE_CONNECTORS = [
+_USER_FEEDBACK_TREE_CONNECTORS = [
     {"sources": ["root"], "targets": ["yes", "no"]},
     {"sources": ["yes"], "targets": ["ratingq"]},
     {"sources": ["no"], "targets": ["declineq"]},
@@ -919,7 +1023,7 @@ _RLHF_TREE_CONNECTORS = [
     {"sources": ["chunkq"], "targets": ["chunk_ns", "chunk_pk"]},
 ]
 
-_RLHF_TREE_LEGEND_ROWS = [
+_USER_FEEDBACK_TREE_LEGEND_ROWS = [
     ("green", "System working. No action needed."),
     ("amber", "System partially working, or a lower-severity miss. Worth a look."),
     ("red", "System not working. Needs review."),
@@ -927,8 +1031,8 @@ _RLHF_TREE_LEGEND_ROWS = [
 ]
 
 
-def rlhf_tree_svg():
-    return _tree_svg(_RLHF_TREE_BOXES, _RLHF_TREE_CONNECTORS, _RLHF_TREE_LEGEND_ROWS)
+def user_feedback_tree_svg():
+    return _tree_svg(_USER_FEEDBACK_TREE_BOXES, _USER_FEEDBACK_TREE_CONNECTORS, _USER_FEEDBACK_TREE_LEGEND_ROWS)
 
 
 # =====================================================================
@@ -994,6 +1098,7 @@ button:disabled{opacity:.4;cursor:default}
 .num{flex:.25;color:var(--text-faint);font-variant-numeric:tabular-nums}
 .q{flex:2.1;padding-right:8px}
 .lc{flex:.5;text-align:center}
+.lc-wide{flex:.9;text-align:center}
 .diag{flex:2}
 .typepill{font-size:11px;color:var(--text-faint);border:1px solid var(--border);border-radius:4px;padding:1px 6px;margin-left:6px}
 .chip{font-size:11.5px;padding:3px 10px;border-radius:6px;display:inline-block;cursor:help}
@@ -1030,12 +1135,12 @@ button:disabled{opacity:.4;cursor:default}
 <body>
 <div class="wrap">
   <h1>Rabivy AI Engine maintenance dashboard</h1>
-  <p class="sub">Golden test set, live queries, and RLHF feedback all live here</p>
+  <p class="sub">Golden test set, live queries, and user feedback all live here</p>
 
   <div class="tabs">
     <button id="toptab-golden" class="active" onclick="setTopTab('golden')">Golden test set</button>
     <button id="toptab-live" onclick="setTopTab('live')">Live queries</button>
-    <button id="toptab-rlhf" onclick="setTopTab('rlhf')">RLHF feedback</button>
+    <button id="toptab-user-feedback" onclick="setTopTab('user-feedback')">User Feedback</button>
   </div>
 
   <div id="golden-tab">
@@ -1076,13 +1181,14 @@ button:disabled{opacity:.4;cursor:default}
   </div>
 
   <div id="live-tab" style="display:none">
-    <p class="sub" style="margin-bottom:1rem">Every real question chat_ui.py has answered, classified ONLY by the 4 automated gates - no human opinion involved. It can't tell you whether an answer was actually right, only whether the mechanical checks passed. For a human read on correctness, see the RLHF feedback tab.</p>
+    <p class="sub" style="margin-bottom:1rem">Every real question chat_ui.py has answered, classified ONLY by the 4 automated gates - no human opinion involved. It can't tell you whether an answer was actually right, only whether the mechanical checks passed. For a human read on correctness, see the User Feedback tab.</p>
 
     <div class="controls">
       <div class="src">
         <button id="btn-live-tree" onclick="setLiveSource('tree')">Decision tree logic</button>
         <button id="btn-live-queries" class="active" onclick="setLiveSource('queries')">All queries</button>
         <button id="btn-live-trend" onclick="setLiveSource('trend')">Trend</button>
+        <button id="btn-live-batch" onclick="setLiveSource('batch')">Batch review</button>
       </div>
     </div>
 
@@ -1112,40 +1218,76 @@ button:disabled{opacity:.4;cursor:default}
     </div>
 
     <div class="tree-card" id="live-trend-view"></div>
+
+    <div id="live-batch-view" style="display:none">
+      <p class="sub" style="margin-bottom:1rem">A second, independent AI model checks whether a sample of real answers are actually supported by the evidence they cite - never running on live traffic until it first proves itself on a known-answer exam. It ONLY checks whether the answer's claims are backed by the evidence shown - it does NOT check whether the answer actually addresses the question that was asked. That's a real current limitation, not an oversight - a fully-cited answer to the wrong question would still score "supported" here.</p>
+      <div id="judge-kpis-1" class="kpis-review"></div>
+      <div id="judge-kpis-2" class="kpis-review"></div>
+
+      <h3>Live batch review - item by item</h3>
+      <p class="sub" id="judge-review-sub" style="margin-bottom:0.75rem"></p>
+      <div class="tablecard">
+        <div class="thead">
+          <div class="num">#</div>
+          <div class="q">Question</div>
+          <div class="lc-wide">Gate</div>
+          <div class="lc-wide">Judge</div>
+          <div class="lc-wide">Human</div>
+        </div>
+        <div id="judge-review-rows"></div>
+      </div>
+
+      <h3>Disagreements</h3>
+      <div id="judge-disagreements"></div>
+
+      <div id="judge-exam-section" style="display:none">
+        <h3>Entrance exam - item by item</h3>
+        <p class="sub" id="judge-exam-sub" style="margin-bottom:0.75rem"></p>
+        <div class="tablecard">
+          <div class="thead">
+            <div class="num">#</div>
+            <div class="q">Question</div>
+            <div class="diag">Method / result (click a row for full detail)</div>
+          </div>
+          <div id="judge-exam-rows"></div>
+        </div>
+        <div id="judge-exam-history"></div>
+      </div>
+    </div>
   </div>
 
-  <div id="rlhf-tab" style="display:none">
+  <div id="user-feedback-tab" style="display:none">
     <p class="sub" style="margin-bottom:1rem">Only queries a rep has actually reviewed - reconstructs the SAME 6-leaf classification the golden test set uses, from what a rep observed on a real answer. See the Live Queries tab for every query, reviewed or not.</p>
 
     <div class="controls">
       <div class="src">
-        <button id="btn-rlhf-tree" onclick="setRlhfSource('tree')">Decision tree logic</button>
-        <button id="btn-rlhf-reviewed" class="active" onclick="setRlhfSource('reviewed')">Reviewed queries</button>
-        <button id="btn-rlhf-trend" onclick="setRlhfSource('trend')">Trend</button>
+        <button id="btn-user-feedback-tree" onclick="setUserFeedbackSource('tree')">Decision tree logic</button>
+        <button id="btn-user-feedback-reviewed" class="active" onclick="setUserFeedbackSource('reviewed')">Reviewed queries</button>
+        <button id="btn-user-feedback-trend" onclick="setUserFeedbackSource('trend')">Trend</button>
       </div>
     </div>
 
-    <div id="rlhf-reviewed-view">
-      <div class="kpis-review" id="rlhf-kpis-review"></div>
+    <div id="user-feedback-reviewed-view">
+      <div class="kpis-review" id="user-feedback-kpis-review"></div>
 
-      <div class="legend" id="rlhf-legend"></div>
+      <div class="legend" id="user-feedback-legend"></div>
 
-      <div class="tablecard" id="rlhf-table-view">
+      <div class="tablecard" id="user-feedback-table-view">
         <div class="thead">
           <div class="num">#</div>
           <div class="q">Question</div>
           <div class="diag">Diagnosis (click a chip or row for what it means)</div>
         </div>
-        <div id="rlhf-rows"></div>
+        <div id="user-feedback-rows"></div>
       </div>
-      <p class="footnote" id="rlhf-footnote"></p>
+      <p class="footnote" id="user-feedback-footnote"></p>
     </div>
 
-    <div class="tree-card" id="rlhf-tree-view">
-      $RLHF_TREE_SVG
+    <div class="tree-card" id="user-feedback-tree-view">
+      $USER_FEEDBACK_TREE_SVG
     </div>
 
-    <div class="tree-card" id="rlhf-trend-view"></div>
+    <div class="tree-card" id="user-feedback-trend-view"></div>
   </div>
 </div>
 
@@ -1172,12 +1314,12 @@ function setTopTab(t){
   topTab = t;
   document.getElementById('toptab-golden').className = t==='golden' ? 'active' : '';
   document.getElementById('toptab-live').className = t==='live' ? 'active' : '';
-  document.getElementById('toptab-rlhf').className = t==='rlhf' ? 'active' : '';
+  document.getElementById('toptab-user-feedback').className = t==='user-feedback' ? 'active' : '';
   document.getElementById('golden-tab').style.display = t==='golden' ? '' : 'none';
   document.getElementById('live-tab').style.display = t==='live' ? '' : 'none';
-  document.getElementById('rlhf-tab').style.display = t==='rlhf' ? '' : 'none';
+  document.getElementById('user-feedback-tab').style.display = t==='user-feedback' ? '' : 'none';
   if(t==='live') renderLive();
-  if(t==='rlhf') renderRlhf();
+  if(t==='user-feedback') renderUserFeedback();
 }
 
 let liveSource = 'queries';
@@ -1186,22 +1328,25 @@ function setLiveSource(s){
   document.getElementById('btn-live-tree').className = s==='tree' ? 'active' : '';
   document.getElementById('btn-live-queries').className = s==='queries' ? 'active' : '';
   document.getElementById('btn-live-trend').className = s==='trend' ? 'active' : '';
+  document.getElementById('btn-live-batch').className = s==='batch' ? 'active' : '';
   document.getElementById('live-queries-view').style.display = s==='queries' ? '' : 'none';
   document.getElementById('live-tree-view').style.display = s==='tree' ? 'block' : 'none';
   document.getElementById('live-trend-view').style.display = s==='trend' ? 'block' : 'none';
+  document.getElementById('live-batch-view').style.display = s==='batch' ? 'block' : 'none';
   if(s==='trend') renderLiveTrend();
+  if(s==='batch') renderJudgeBatch();
 }
 
-let rlhfSource = 'reviewed';
-function setRlhfSource(s){
-  rlhfSource = s;
-  document.getElementById('btn-rlhf-tree').className = s==='tree' ? 'active' : '';
-  document.getElementById('btn-rlhf-reviewed').className = s==='reviewed' ? 'active' : '';
-  document.getElementById('btn-rlhf-trend').className = s==='trend' ? 'active' : '';
-  document.getElementById('rlhf-reviewed-view').style.display = s==='reviewed' ? '' : 'none';
-  document.getElementById('rlhf-tree-view').style.display = s==='tree' ? 'block' : 'none';
-  document.getElementById('rlhf-trend-view').style.display = s==='trend' ? 'block' : 'none';
-  if(s==='trend') renderRlhfTrend();
+let userFeedbackSource = 'reviewed';
+function setUserFeedbackSource(s){
+  userFeedbackSource = s;
+  document.getElementById('btn-user-feedback-tree').className = s==='tree' ? 'active' : '';
+  document.getElementById('btn-user-feedback-reviewed').className = s==='reviewed' ? 'active' : '';
+  document.getElementById('btn-user-feedback-trend').className = s==='trend' ? 'active' : '';
+  document.getElementById('user-feedback-reviewed-view').style.display = s==='reviewed' ? '' : 'none';
+  document.getElementById('user-feedback-tree-view').style.display = s==='tree' ? 'block' : 'none';
+  document.getElementById('user-feedback-trend-view').style.display = s==='trend' ? 'block' : 'none';
+  if(s==='trend') renderUserFeedbackTrend();
 }
 
 function setSource(s){
@@ -1237,7 +1382,7 @@ function colorVar(c){
 // dashboard stays one self-contained file). Each bar is one calendar
 // day; green/amber/red counts stack bottom-to-top. Data comes
 // straight from DATA.agent.trend / DATA.system.trend /
-// DATA.live.live_trend / DATA.live.rlhf_trend - all computed in
+// DATA.live.live_trend / DATA.live.user_feedback_trend - all computed in
 // build_dashboard.py, this just draws it.
 // ---------------------------------------------------------------------
 function trendLegend(){
@@ -1327,8 +1472,8 @@ function renderGoldenTrend(){
 function renderLiveTrend(){
   document.getElementById('live-trend-view').innerHTML = trendCard(DATA.live.live_trend);
 }
-function renderRlhfTrend(){
-  document.getElementById('rlhf-trend-view').innerHTML = trendCard(DATA.live.rlhf_trend);
+function renderUserFeedbackTrend(){
+  document.getElementById('user-feedback-trend-view').innerHTML = trendCard(DATA.live.user_feedback_trend);
 }
 function toggleColor(c){
   if(activeColors.has(c)) activeColors.delete(c); else activeColors.add(c);
@@ -1394,8 +1539,8 @@ function mdToHtml(s){
   // A doubled dollar sign is Template's own escape for one literal
   // dollar sign - needed below for JS's regex capture-group reference,
   // and again further down for a regex end-of-line anchor.
-  var t = esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$$1</strong>');
-  var blocks = t.split(/\\n\s*\\n/);
+  var t = esc(s).replace(/\\*\\*(.+?)\\*\\*/g, '<strong>$$1</strong>');
+  var blocks = t.split(/\\n\\s*\\n/);
   return blocks.map(function(block){
     // Line-by-line within the block, not "the whole block is a list or
     // it isn't" - a real answer often has a label line immediately
@@ -1411,7 +1556,7 @@ function mdToHtml(s){
       if (textBuf.length) { html += '<p>' + textBuf.join('<br>') + '</p>'; textBuf = []; }
     }
     lines.forEach(function(l){
-      var m = /^\s*-\s+(.*)$$/.exec(l);
+      var m = /^\\s*-\\s+(.*)$$/.exec(l);
       if (m) { flushText(); listBuf.push(m[1]); }
       else { flushList(); textBuf.push(l); }
     });
@@ -1421,7 +1566,7 @@ function mdToHtml(s){
 }
 
 // Shared accordion state for all three tabs' item-detail panels (golden
-// toggle(), live toggleLive(), rlhf toggleRlhf()) - only one item open
+// toggle(), live toggleLive(), feedback toggleUserFeedback()) - only one item open
 // at a time, and clicking anywhere outside the open panel (and outside
 // any row, so a click that opens a DIFFERENT item isn't immediately
 // undone) closes it.
@@ -1482,8 +1627,8 @@ function detailHTML(r,i){
 // =====================================================================
 // LIVE QUERIES TAB - gate-only. EVERY logged query gets a row, coloured
 // purely by the 4 automated gates (r.status / r.status_color) - never
-// by an RLHF leaf, even if one exists. The "Reviewed" KPI box and the
-// small badge on a row are just a pointer over to the RLHF feedback
+// by a user feedback leaf, even if one exists. The "Reviewed" KPI box and the
+// small badge on a row are just a pointer over to the User Feedback
 // tab, not a colour input here.
 // =====================================================================
 let liveActiveColors = new Set(['green','amber','red']);
@@ -1519,9 +1664,9 @@ function liveDetailHTML(r,i){
     return '<div class="dsection"><p class="dlabel">'+esc(g.name)+'</p><p class="dtext">'+gateDot(g)+' '+esc(g.detail || '(no detail)')+'</p></div>';
   }).join('');
   var reviewNote = r.reviewed
-    ? '<div class="dsection"><p class="dlabel">RLHF</p><p class="dtext">A rep has reviewed this one. '
-      +'<button class="linkbtn" onclick="event.stopPropagation();jumpToRlhf(\\''+esc(r.query_id)+'\\')">View in RLHF feedback tab &rarr;</button></p></div>'
-    : '<div class="dsection"><p class="dlabel">RLHF</p><p class="dtext">Not yet reviewed by a rep.</p></div>';
+    ? '<div class="dsection"><p class="dlabel">User Feedback</p><p class="dtext">A rep has reviewed this one. '
+      +'<button class="linkbtn" onclick="event.stopPropagation();jumpToUserFeedback(\\''+esc(r.query_id)+'\\')">View in User Feedback tab &rarr;</button></p></div>'
+    : '<div class="dsection"><p class="dlabel">User Feedback</p><p class="dtext">Not yet reviewed by a rep.</p></div>';
   // Added 2026-08-07: shows exactly what the model had in memory BEFORE
   // this question - the same trimmed question/answer pairs chat_ui.py
   // snapshots at ask-time (see agent.py's _trim_history()). This is what
@@ -1580,14 +1725,14 @@ function renderLive(){
     '<div class="kpi c-red"><p class="label">Red</p><p class="what">Needs review now</p><p class="value">'+k.red_n+'</p><p class="sub">of '+k.total+' queries</p></div>'+
     '<div class="kpi c-amber"><p class="label">Amber</p><p class="what">Worth a look</p><p class="value">'+k.amber_n+'</p><p class="sub">of '+k.total+' queries</p></div>'+
     '<div class="kpi c-green"><p class="label">Green</p><p class="what">All gates checked out</p><p class="value">'+k.green_n+'</p><p class="sub">of '+k.total+' queries</p></div>'+
-    '<div class="kpi c-purple"><p class="label">Reviewed via RLHF</p><p class="what">Has a rep review - see RLHF tab</p><p class="value">'+k.reviewed_pct+'%</p><p class="sub">'+k.reviewed_n+' / '+k.total+'</p></div>';
+    '<div class="kpi c-purple"><p class="label">Reviewed via user feedback</p><p class="what">Has a rep review - see User Feedback tab</p><p class="value">'+k.reviewed_pct+'%</p><p class="sub">'+k.reviewed_n+' / '+k.total+'</p></div>';
 
   const rows = d.rows.filter(function(r){ return liveActiveColors.has(r.status_color || 'na'); });
   document.getElementById('live-rows').innerHTML = rows.map(function(r,i){
     var gateCells = r.gates.map(function(g){ return '<div class="lc">'+gateDot(g)+'</div>'; }).join('');
     return '<div class="row" onclick="toggleLive('+i+')">'+
       '<div class="rowline"><div class="num">'+r.n+'</div><div class="q">'+esc(r.q)
-        +(r.reviewed?'<button class="linkpill" onclick="event.stopPropagation();jumpToRlhf(\\''+esc(r.query_id)+'\\')" title="View this review in the RLHF feedback tab">reviewed &rarr;</button>':'')
+        +(r.reviewed?'<button class="linkpill" onclick="event.stopPropagation();jumpToUserFeedback(\\''+esc(r.query_id)+'\\')" title="View this review in the User Feedback tab">reviewed &rarr;</button>':'')
         +'</div>'+
       gateCells+
       '<div class="diag"><span class="chip '+(r.status_color||'na')+'">'+esc(r.status)+'</span></div></div>'+
@@ -1614,62 +1759,221 @@ function toggleCtxTurn(id){
 }
 
 // Jumps from a reviewed Live Queries row straight to its entry in the
-// RLHF feedback tab - resets the RLHF colour filter to "show everything"
-// first, so the target row can't be hidden by a filter left on from a
-// previous visit, then expands and scrolls to it.
-function jumpToRlhf(queryId){
-  rlhfActiveColors = new Set(['green','amber','red']);
-  setTopTab('rlhf');
+// User Feedback tab - resets the user feedback colour filter to "show
+// everything" first, so the target row can't be hidden by a filter left
+// on from a previous visit, then expands and scrolls to it.
+function jumpToUserFeedback(queryId){
+  userFeedbackActiveColors = new Set(['green','amber','red']);
+  setTopTab('user-feedback');
   const reviewedRows = DATA.live.rows.filter(function(r){ return r.reviewed; });
   const idx = reviewedRows.findIndex(function(r){ return r.query_id === queryId; });
   if(idx < 0) return;
-  const rowEl = document.querySelectorAll('#rlhf-rows .row')[idx];
+  const rowEl = document.querySelectorAll('#user-feedback-rows .row')[idx];
   const detailEl = document.getElementById('rd'+idx);
   if(detailEl) detailEl.style.display = 'block';
   if(rowEl && rowEl.scrollIntoView) rowEl.scrollIntoView({behavior:'smooth', block:'center'});
 }
 
 // =====================================================================
-// RLHF FEEDBACK TAB - reviewed queries ONLY. Reuses the golden set's
-// own 6-leaf vocabulary/colours (r.leaf/r.color), reconstructed from a
-// rep's own read of a real answer - see _rlhf_leaf() in build_dashboard.py.
+// CONTRARIAN JUDGE - "Batch review" sub-tab under Live Queries. See
+// _load_judge() in build_dashboard.py for how DATA.judge is built -
+// this just renders it. Reuses the same row/detail accordion pattern
+// as every other tab (_toggleDetail/openDetailEl above).
 // =====================================================================
-let rlhfActiveColors = new Set(['green','amber','red']);
 
-function rlhfDesc(leaf){
+function verdictChip(v){
+  const cls = v === 'supported' ? 'green' : v === 'unsupported' ? 'red' : 'na';
+  return '<span class="chip '+cls+'">'+esc(v || 'not yet rated')+'</span>';
+}
+
+function judgeExamDetailHTML(item, i){
+  return '<div class="detail" id="jed'+i+'">'+
+    '<div class="dsection"><p class="dlabel">Method</p><p class="dtext">'+esc(item.method)+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Evidence shown to the judge</p><div class="quote">'+mdToHtml(item.evidence_text)+'</div></div>'+
+    '<div class="dsection"><p class="dlabel">Answer shown to the judge</p><div class="quote">'+mdToHtml(item.given_answer)+'</div></div>'+
+    '<div class="dsection"><p class="dlabel">True verdict (planted, judge never sees this)</p><p class="dtext">'+verdictChip(item.true_verdict)+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Judge verdict</p><p class="dtext">'+verdictChip(item.judge_verdict)+' '
+      +(item.correct ? '<span class="ok">&#10003; correct</span>' : '<span class="no">&#10007; wrong</span>')+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Judge reasoning</p><p class="dtext">'+esc(item.judge_reasoning || '')+'</p></div>'+
+  '</div>';
+}
+function toggleJudgeExam(i){ _toggleDetail(document.getElementById('jed'+i)); }
+
+function judgeReviewDetailHTML(row, i){
+  var humanLine = row.human_verdict
+    ? '<p class="dtext">'+verdictChip(row.human_verdict)+'</p>'
+    : '<p class="dtext">Not yet rated by a human - run human_review_ui.py.</p>';
+  return '<div class="detail" id="jrd'+i+'">'+
+    '<div class="dsection"><p class="dlabel">Gate colour (from the 4 automated gates)</p><p class="dtext"><span class="chip '+(row.gate_color||'na')+'">'+esc(row.gate_color||'')+'</span></p></div>'+
+    '<div class="dsection"><p class="dlabel">Evidence shown to the judge</p><div class="quote">'+mdToHtml(row.evidence_text)+'</div></div>'+
+    '<div class="dsection"><p class="dlabel">Answer given</p><div class="quote">'+mdToHtml(row.given_answer)+'</div></div>'+
+    '<div class="dsection"><p class="dlabel">Judge verdict</p><p class="dtext">'+verdictChip(row.judge_verdict)+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Judge reasoning</p><p class="dtext">'+esc(row.judge_reasoning || '')+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Human verdict</p>'+humanLine+'</div>'+
+    '<div class="dsection"><p class="dlabel">Agrees with the gates?</p><p class="dtext">'+(row.agrees_with_gates ? '<span class="ok">&#10003; yes</span>' : '<span class="no">&#10007; no - flagged for human adjudication</span>')+'</p></div>'+
+  '</div>';
+}
+function toggleJudgeReview(i){ _toggleDetail(document.getElementById('jrd'+i)); }
+
+function jumpToJudgeBatch(queryId){
+  setLiveSource('batch');
+  const rows = DATA.judge.review_rows;
+  const idx = rows.findIndex(function(r){ return r.query_id === queryId; });
+  if(idx < 0) return;
+  const rowEl = document.querySelectorAll('#judge-review-rows .row')[idx];
+  const detailEl = document.getElementById('jrd'+idx);
+  if(detailEl) _toggleDetail(detailEl);
+  if(rowEl && rowEl.scrollIntoView) rowEl.scrollIntoView({behavior:'smooth', block:'center'});
+}
+
+function kappaReadout(kappa){
+  if(kappa === null || kappa === undefined) return 'not enough data yet';
+  // Landis & Koch (1977) standard interpretation bands.
+  var label = kappa < 0 ? 'poor' : kappa <= 0.20 ? 'slight' : kappa <= 0.40 ? 'fair'
+    : kappa <= 0.60 ? 'moderate' : kappa <= 0.80 ? 'substantial' : 'almost perfect';
+  return kappa.toFixed(2) + ' (' + label + ')';
+}
+
+function toggleJudgeExamSection(){
+  var el = document.getElementById('judge-exam-section');
+  var opening = el.style.display !== 'block';
+  el.style.display = opening ? 'block' : 'none';
+  // Only scroll when OPENING it - the section sits below the live-batch
+  // and disagreements tables, so without this the click just reveals
+  // the section off-screen and looks like nothing happened. Same
+  // scrollIntoView pattern jumpToJudgeBatch/jumpToUserFeedback already
+  // use elsewhere in this file for exactly this reason.
+  if(opening && el.scrollIntoView) el.scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function renderJudgeBatch(){
+  const d = DATA.judge, k = d.kpi;
+
+  document.getElementById('judge-kpis-1').innerHTML =
+    '<div class="kpi '+(k.exam_passed ? 'c-green' : k.exam_passed === false ? 'c-red' : '')+'" style="cursor:pointer" onclick="toggleJudgeExamSection()">'
+      +'<p class="label">Entrance exam</p><p class="what">Click to see item-by-item exam results</p>'
+      +'<p class="value">'+(k.exam_run_at ? (k.exam_passed ? 'PASSED' : 'FAILED') : 'not run yet')+'</p>'
+      +'<p class="sub">'+(k.exam_run_at ? k.exam_accuracy_pct+'% (bar '+k.exam_bar_pct+'%)' : 'run judge_loop.py --exam')+'</p></div>'+
+    '<div class="kpi"><p class="label">Reviewed</p><p class="what">Of today\\'s eligible Green + Amber live queries</p>'
+      +'<p class="value">'+k.reviewed_n+'</p><p class="sub">of '+k.pool_n+' eligible</p></div>'+
+    '<div class="kpi"><p class="label">Judge agrees with gates</p><p class="what">Judge verdict matches the gate outcome</p>'
+      +'<p class="value">'+(k.judge_agree_pct===null?'-':k.judge_agree_pct+'%')+'</p><p class="sub">'+k.judge_agree_n+' / '+k.reviewed_n+' ('+k.flagged_n+' flagged)</p></div>';
+
+  document.getElementById('judge-kpis-2').innerHTML =
+    '<div class="kpi"><p class="label">Human agrees with gates</p><p class="what">Of cases a human has actually rated</p>'
+      +'<p class="value">'+(k.human_agree_pct===null?'-':k.human_agree_pct+'%')+'</p><p class="sub">'+k.human_agree_n+' / '+k.human_voted_n+' rated</p></div>'+
+    '<div class="kpi"><p class="label">Judge vs. human agreement</p><p class="what">Raw agreement, same cases only</p>'
+      +'<p class="value">'+(k.agreement_pct===null?'-':k.agreement_pct+'%')+'</p><p class="sub">'+(k.compared_n||0)+' compared</p></div>'+
+    '<div class="kpi"><p class="label">Cohen\\'s kappa</p><p class="what">Corrects raw agreement for chance</p>'
+      +'<p class="value">'+kappaReadout(k.kappa)+'</p><p class="sub">Landis &amp; Koch 1977 scale</p></div>';
+
+  document.getElementById('judge-review-sub').textContent = d.review_run_at
+    ? 'Latest batch: ' + d.review_run_at + ' - never includes Red queries (already quarantined for mandatory human review).'
+    : 'No live batch has been reviewed yet - run judge_loop.py --review (requires a passed exam first).';
+  document.getElementById('judge-review-rows').innerHTML = d.review_rows.map(function(row,i){
+    return '<div class="row" onclick="toggleJudgeReview('+i+')">'+
+      '<div class="rowline"><div class="num">'+(i+1)+'</div><div class="q">'+esc(row.question)+'</div>'+
+      '<div class="lc-wide"><span class="chip '+(row.gate_color||'na')+'">'+esc(row.gate_color||'')+'</span></div>'+
+      '<div class="lc-wide">'+verdictChip(row.judge_verdict)+'</div>'+
+      '<div class="lc-wide">'+(row.human_verdict ? verdictChip(row.human_verdict) : '<span class="chip na">-</span>')+'</div></div>'+
+      judgeReviewDetailHTML(row,i)+
+    '</div>';
+  }).join('');
+
+  document.getElementById('judge-exam-sub').textContent = d.exam_run_at
+    ? 'Latest run: ' + d.exam_run_at + ' - ' + d.exam_items.length + ' gold item(s), each built to have a KNOWN correct verdict the judge never sees.'
+    : 'No exam has been run yet.';
+  document.getElementById('judge-exam-rows').innerHTML = d.exam_items.map(function(item,i){
+    return '<div class="row" onclick="toggleJudgeExam('+i+')">'+
+      '<div class="rowline"><div class="num">'+(i+1)+'</div><div class="q">'+esc(item.question)+'</div>'+
+      '<div class="diag">'+esc(item.method)+' &middot; '+verdictChip(item.judge_verdict)
+        +(item.correct ? ' <span class="ok">&#10003;</span>' : ' <span class="no">&#10007;</span>')+'</div></div>'+
+      judgeExamDetailHTML(item,i)+
+    '</div>';
+  }).join('');
+
+  if(d.exam_runs_history && d.exam_runs_history.length > 1){
+    document.getElementById('judge-exam-history').innerHTML =
+      '<p class="dlabel" style="margin-top:1rem">Past exam runs</p><ul style="font-size:13px;color:var(--text-dim)">'
+      + d.exam_runs_history.slice().reverse().map(function(e){
+          return '<li>'+esc(e.run_at||'')+' - '+(e.passed?'PASSED':'FAILED')+' - '
+            +Math.round(100*(e.accuracy||0))+'% ('+e.correct+'/'+e.total_items+'), backend: '+esc(e.judge_backend||'')+'</li>';
+        }).join('')
+      + '</ul>';
+  } else {
+    document.getElementById('judge-exam-history').innerHTML = '';
+  }
+
+  // "Disagreements" covers TWO different comparisons, both read straight
+  // off review_rows so they can't drift out of sync with each other:
+  //   1) audit gate vs. judge - row.agrees_with_gates is already computed
+  //      for EVERY reviewed row (see judgeReviewDetailHTML above), so this
+  //      is available whether or not a human has rated the row yet.
+  //   2) judge vs. human - only possible once a human has also voted on
+  //      that row (row.human_verdict set).
+  // A row can trigger both at once - it's listed once, tagged with both,
+  // not duplicated. Kept in the same row/rowline/linkpill style as every
+  // other list on this tab.
+  var judgeDisagreements = d.review_rows.filter(function(row){
+    var gateDisagree = row.agrees_with_gates === false;
+    var humanDisagree = !!row.human_verdict && row.human_verdict !== row.judge_verdict;
+    return gateDisagree || humanDisagree;
+  });
+  document.getElementById('judge-disagreements').innerHTML = judgeDisagreements.length
+    ? judgeDisagreements.map(function(row){
+        var gateDisagree = row.agrees_with_gates === false;
+        var humanDisagree = !!row.human_verdict && row.human_verdict !== row.judge_verdict;
+        var tags = (gateDisagree ? '<span class="dlabel" style="display:inline;margin-right:8px">audit gate vs. judge</span>' : '')
+          + (humanDisagree ? '<span class="dlabel" style="display:inline">judge vs. human</span>' : '');
+        return '<div class="row" style="cursor:pointer" onclick="jumpToJudgeBatch(\\''+esc(row.query_id)+'\\')">'
+          +'<div class="rowline"><div class="q">'+tags+'<br>Gate: <span class="chip '+(row.gate_color||'na')+'">'+esc(row.gate_color||'')+'</span>'
+          +' &nbsp; Judge: '+verdictChip(row.judge_verdict)+' &nbsp; Human: '+(row.human_verdict ? verdictChip(row.human_verdict) : '<span class="chip na">-</span>')+'</div>'
+          +'<div class="diag"><span class="linkpill">view case &rarr;</span></div></div></div>';
+      }).join('')
+    : '<p class="sub">None yet - every reviewed case agrees with the gates, and every case a human has also rated agrees with the judge.</p>';
+}
+
+// =====================================================================
+// USER FEEDBACK TAB - reviewed queries ONLY. Reuses the golden set's
+// own 6-leaf vocabulary/colours (r.leaf/r.color), reconstructed from a
+// rep's own read of a real answer - see _user_feedback_leaf() in build_dashboard.py.
+// =====================================================================
+let userFeedbackActiveColors = new Set(['green','amber','red']);
+
+function userFeedbackDesc(leaf){
   if(DIAG_DESC[leaf]) return DIAG_DESC[leaf];
   if(leaf.indexOf('legacy rating') >= 0) return "Reviewed before the detailed review form existed - only a plain rating was captured, no gate/evidence detail.";
   if(leaf.indexOf('flagged for review') >= 0) return "The rep's evidence answer didn't resolve to yes/no, so this needs a second look rather than a guessed leaf.";
   return leaf;
 }
-function rlhfChip(row){
+function userFeedbackChip(row){
   const cls = row.color || 'na';
-  return '<span class="chip '+cls+'" title="'+esc(rlhfDesc(row.leaf))+'">'+esc(row.leaf)+'</span>';
+  return '<span class="chip '+cls+'" title="'+esc(userFeedbackDesc(row.leaf))+'">'+esc(row.leaf)+'</span>';
 }
-function toggleRlhfColor(c){
-  if(rlhfActiveColors.has(c)) rlhfActiveColors.delete(c); else rlhfActiveColors.add(c);
-  renderRlhf();
+function toggleUserFeedbackColor(c){
+  if(userFeedbackActiveColors.has(c)) userFeedbackActiveColors.delete(c); else userFeedbackActiveColors.add(c);
+  renderUserFeedback();
 }
-function renderRlhfLegend(){
+function renderUserFeedbackLegend(){
   const items = [
     ['green','Green - system working'],
     ['amber','Amber - worth a look'],
     ['red','Red - needs review']
   ];
-  var el = document.getElementById('rlhf-legend');
+  var el = document.getElementById('user-feedback-legend');
   el.innerHTML = items.map(function(pair){
     var c = pair[0], label = pair[1];
-    var cls = rlhfActiveColors.has(c) ? 'on' : 'off';
+    var cls = userFeedbackActiveColors.has(c) ? 'on' : 'off';
     return '<span class="legend-pill '+cls+'" data-color="'+c+'"><i class="dot" style="background:'+colorVar(c)+'"></i>'+label+'</span>';
   }).join('');
   Array.prototype.forEach.call(el.children, function(child){
-    child.addEventListener('click', function(){ toggleRlhfColor(child.getAttribute('data-color')); });
+    child.addEventListener('click', function(){ toggleUserFeedbackColor(child.getAttribute('data-color')); });
   });
 }
-function rlhfDetailHTML(r,i){
-  var rl = r.rlhf || {};
+function userFeedbackDetailHTML(r,i){
+  var rl = r.user_feedback || {};
   return '<div class="detail" id="rd'+i+'">'+
-    '<div class="dsection"><p class="dlabel">Diagnosis</p><p class="dtext">'+rlhfChip(r)+' &mdash; '+esc(rlhfDesc(r.leaf))+'</p></div>'+
+    '<div class="dsection"><p class="dlabel">Diagnosis</p><p class="dtext">'+userFeedbackChip(r)+' &mdash; '+esc(userFeedbackDesc(r.leaf))+'</p></div>'+
     '<div class="dsection"><p class="dlabel">Asked</p><p class="dtext">'+esc(r.asked_at || '')+'</p></div>'+
     '<div class="dsection"><p class="dlabel">Rep review</p><p class="dtext">Rating: <strong>'+esc(rl.rating || '-')+'</strong>'+
       (rl.evidence_answer ? ' &middot; Right evidence used: <strong>'+esc(rl.evidence_answer)+'</strong>' : '')+'</p>'+
@@ -1679,27 +1983,27 @@ function rlhfDetailHTML(r,i){
     '<div class="dsection"><p class="dlabel">Answer</p><div class="quote">'+mdToHtml(r.answer)+'</div></div>'+
   '</div>';
 }
-function renderRlhf(){
-  renderRlhfLegend();
+function renderUserFeedback(){
+  renderUserFeedbackLegend();
   const d = DATA.live;
-  const k = d.rlhf_kpi;
-  document.getElementById('rlhf-kpis-review').innerHTML =
+  const k = d.user_feedback_kpi;
+  document.getElementById('user-feedback-kpis-review').innerHTML =
     '<div class="kpi c-red"><p class="label">Red</p><p class="what">Needs review now</p><p class="value">'+k.red_n+'</p><p class="sub">of '+k.total+' reviewed queries</p></div>'+
     '<div class="kpi c-amber"><p class="label">Amber</p><p class="what">Worth a look</p><p class="value">'+k.amber_n+'</p><p class="sub">of '+k.total+' reviewed queries</p></div>'+
     '<div class="kpi c-green"><p class="label">Green</p><p class="what">System working</p><p class="value">'+k.green_n+'</p><p class="sub">of '+k.total+' reviewed queries</p></div>';
 
   const reviewedRows = d.rows.filter(function(r){ return r.reviewed; });
-  const rows = reviewedRows.filter(function(r){ return rlhfActiveColors.has(r.color || 'na'); });
-  document.getElementById('rlhf-rows').innerHTML = rows.map(function(r,i){
-    return '<div class="row" onclick="toggleRlhf('+i+')">'+
+  const rows = reviewedRows.filter(function(r){ return userFeedbackActiveColors.has(r.color || 'na'); });
+  document.getElementById('user-feedback-rows').innerHTML = rows.map(function(r,i){
+    return '<div class="row" onclick="toggleUserFeedback('+i+')">'+
       '<div class="rowline"><div class="num">'+r.n+'</div><div class="q">'+esc(r.q)+'</div>'+
-      '<div class="diag">'+rlhfChip(r)+'</div></div>'+
-      rlhfDetailHTML(r,i)+
+      '<div class="diag">'+userFeedbackChip(r)+'</div></div>'+
+      userFeedbackDetailHTML(r,i)+
       '</div>';
   }).join('');
-  document.getElementById('rlhf-footnote').textContent = rows.length + ' of ' + reviewedRows.length + ' reviewed queries shown.';
+  document.getElementById('user-feedback-footnote').textContent = rows.length + ' of ' + reviewedRows.length + ' reviewed queries shown.';
 }
-function toggleRlhf(i){
+function toggleUserFeedback(i){
   _toggleDetail(document.getElementById('rd'+i));
 }
 
@@ -1747,15 +2051,21 @@ def build():
     agent = _load_source("agent_eval", "Test the agent (LLM)")
     system = _load_source("eval", "Test the system (regex)")
     live = _load_live()
-    data_json = json.dumps({"agent": agent, "system": system, "live": live})
+    judge = _load_judge()
+    data_json = json.dumps({"agent": agent, "system": system, "live": live, "judge": judge})
     html = _TEMPLATE.substitute(DATA_JSON=data_json, GOLDEN_TREE_SVG=golden_tree_svg(),
-                                 LIVE_TREE_SVG=live_tree_svg(), RLHF_TREE_SVG=rlhf_tree_svg())
+                                 LIVE_TREE_SVG=live_tree_svg(), USER_FEEDBACK_TREE_SVG=user_feedback_tree_svg())
     with open(OUTPUT_PATH, "w", encoding="utf-8") as f:
         f.write(html)
     print(f"Wrote {OUTPUT_PATH}")
     print(f"  agent  run: {agent['run']}  ({len(agent['rows'])} questions)")
     print(f"  system run: {system['run']}  ({len(system['rows'])} questions)")
     print(f"  live queries: {len(live['rows'])} logged, {live['kpi']['reviewed_n']} reviewed")
+    if judge["exam_run_at"]:
+        print(f"  contrarian judge: exam {'PASSED' if judge['kpi']['exam_passed'] else 'FAILED'} "
+              f"({judge['kpi']['exam_accuracy_pct']}%), {judge['kpi']['reviewed_n']} live case(s) reviewed")
+    else:
+        print("  contrarian judge: no exam run yet - run judge_loop.py --exam")
 
 
 if __name__ == "__main__":

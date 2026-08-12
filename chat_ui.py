@@ -22,11 +22,11 @@
 #                the trimmed evidence - whether the answer was
 #                delivered, quarantined, or the request errored out.
 #                Nothing that comes in is allowed to go un-logged.
-#                Each entry gets a query_id, which is how an RLHF
-#                rating (below) is tied back to the exact query it's
-#                rating.
-#   RLHF       - under every answer the user actually sees (delivered,
-#                or a quarantined answer once a reviewer releases it):
+#                Each entry gets a query_id, which is how a user
+#                feedback rating (below) is tied back to the exact
+#                query it's rating.
+#   USER       - under every answer the user actually sees (delivered,
+#   FEEDBACK     or a quarantined answer once a reviewer releases it):
 #                first "was this correct?" (correct / partially correct
 #                / incorrect / vague - didn't really answer), then one
 #                follow-up - "was the right info actually in the
@@ -41,18 +41,19 @@
 #                answer" and "flagged, evidence unconfirmed" - this
 #                answer most likely belongs to, from a rep's own
 #                judgement, without needing ground truth. See
-#                _rlhf_leaf() below for the exact mapping.
+#                _user_feedback_leaf() below for the exact mapping.
 #                Every rating writes ONE self-contained line to
-#                output/RLHF_FEEDBACK/rlhf_log.jsonl - the full answer,
-#                gates, evidence trace and audit trail are copied in
-#                alongside the rating (not just a query_id pointer), so
-#                one record has everything needed to understand the
-#                judgement without cross-referencing the query log.
+#                output/USER_FEEDBACK/user_feedback_log.jsonl - the full
+#                answer, gates, evidence trace and audit trail are
+#                copied in alongside the rating (not just a query_id
+#                pointer), so one record has everything needed to
+#                understand the judgement without cross-referencing the
+#                query log.
 #
-#   All three logs (query, RLHF, human review) live under output/ in
-#   their own clearly named ALL-CAPS subfolder - output/QUERY_LOG/,
-#   output/RLHF_FEEDBACK/, output/HUMAN_REVIEW/ - rather than as loose
-#   files, so output/ stays scannable as it grows.
+#   All three logs (query, user feedback, human review) live under
+#   output/ in their own clearly named ALL-CAPS subfolder -
+#   output/QUERY_LOG/, output/USER_FEEDBACK/, output/HUMAN_REVIEW/ -
+#   rather than as loose files, so output/ stays scannable as it grows.
 #
 #   python chat_ui.py          -> open http://localhost:8017
 #
@@ -80,7 +81,7 @@ from build_dashboard import _is_decline
 
 REVIEW_LOG = os.path.join("output", "HUMAN_REVIEW", "review_log.jsonl")
 QUERY_LOG = os.path.join("output", "QUERY_LOG", "query_log.jsonl")
-RLHF_LOG = os.path.join("output", "RLHF_FEEDBACK", "rlhf_log.jsonl")
+USER_FEEDBACK_LOG = os.path.join("output", "USER_FEEDBACK", "user_feedback_log.jsonl")
 
 PORT = 8017
 
@@ -214,7 +215,7 @@ def _append_jsonl(path, entry):
         f.write(json.dumps(entry, default=str) + "\n")
 
 
-def _rlhf_leaf(rating, evidence_answer, is_decline):
+def _user_feedback_leaf(rating, evidence_answer, is_decline):
     """Maps a rep's (rating, evidence_answer) pair, plus whether the
     answer's own wording reads as a decline, onto the SAME leaves
     build_dashboard.py's classify() uses for the golden test set - so
@@ -249,7 +250,7 @@ def _rlhf_leaf(rating, evidence_answer, is_decline):
 def _new_query_id():
     """A short, sortable-enough id for one /ask call. Not a full UUID
     on purpose - this shows up in the browser's network tab and in the
-    RLHF POST body, so it stays readable."""
+    user feedback POST body, so it stays readable."""
     return time.strftime("q_%Y%m%d_%H%M%S_") + uuid.uuid4().hex[:6]
 
 
@@ -361,20 +362,20 @@ PAGE = r"""<!DOCTYPE html>
   .qapprove{background:#fff;border-color:#9fd9be;color:var(--ok)}
   .qreject{background:#fff;border-color:#f0b1b1;color:var(--bad)}
   .qdecided{font-size:12px;font-weight:700;margin-top:8px}
-  /* rlhf */
-  .rlhf{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
-  .rlhf-label{font-size:11px;color:var(--muted);margin-bottom:6px}
-  .rlhf-btns{display:flex;gap:8px;flex-wrap:wrap}
-  .rlhf-btn{padding:6px 12px;font-size:11.5px;font-weight:600;border-radius:20px;
+  /* user feedback */
+  .user-feedback{margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}
+  .user-feedback-label{font-size:11px;color:var(--muted);margin-bottom:6px}
+  .user-feedback-btns{display:flex;gap:8px;flex-wrap:wrap}
+  .user-feedback-btn{padding:6px 12px;font-size:11.5px;font-weight:600;border-radius:20px;
             border:1.5px solid var(--line);background:#fff;cursor:pointer;color:var(--muted)}
-  .rlhf-btn:hover{border-color:var(--brand);color:var(--brand)}
-  .rlhf-step1{display:none;margin-top:10px}
-  .rlhf-note{width:100%;margin-top:8px;display:none}
-  .rlhf-note textarea{width:100%;font:inherit;font-size:12px;padding:8px;border:1.5px solid var(--line);
+  .user-feedback-btn:hover{border-color:var(--brand);color:var(--brand)}
+  .user-feedback-step1{display:none;margin-top:10px}
+  .user-feedback-note{width:100%;margin-top:8px;display:none}
+  .user-feedback-note textarea{width:100%;font:inherit;font-size:12px;padding:8px;border:1.5px solid var(--line);
                        border-radius:8px;resize:vertical;min-height:50px;box-sizing:border-box}
-  .rlhf-note button{margin-top:6px;padding:5px 14px;font-size:11.5px;font-weight:600;color:#fff;
+  .user-feedback-note button{margin-top:6px;padding:5px 14px;font-size:11.5px;font-weight:600;color:#fff;
                      background:var(--brand);border:none;border-radius:8px;cursor:pointer}
-  .rlhf-done{font-size:11.5px;font-weight:700;color:var(--ok)}
+  .user-feedback-done{font-size:11.5px;font-weight:700;color:var(--ok)}
   .thinking{color:var(--muted);font-size:13px}
   .dots::after{content:'';animation:d 1.2s infinite}
   @keyframes d{0%{content:'.'}33%{content:'..'}66%{content:'...'}}
@@ -479,37 +480,37 @@ function logReview(question,d,decision){
 // misfiled it as "Correct answer" instead of "Correctly rejected".
 // The decline branch below asks ONE direct question instead, and
 // always sends evidence_answer:'no' under the hood (nothing was used,
-// so there's nothing to confirm) - _rlhf_leaf's existing logic then
+// so there's nothing to confirm) - _user_feedback_leaf's existing logic then
 // lands it on "Correctly rejected" or "Retrieval fail" automatically.
-function rlhfHtml(isDecline){
+function userFeedbackHtml(isDecline){
   if(isDecline){
-    return '<div class="rlhf">'
-      +'<div class="rlhf-decline"><div class="rlhf-label">The system said it couldn&rsquo;t answer this. Was that the right call?</div>'
-      +'<div class="rlhf-btns">'
-      +'<button class="rlhf-btn" data-decline="correct">&#10003; Yes &mdash; correct, no answer exists</button>'
-      +'<button class="rlhf-btn" data-decline="incorrect">&#10007; No &mdash; an answer does exist, it should have found it</button>'
-      +'<button class="rlhf-btn" data-decline="unsure">Not sure</button>'
+    return '<div class="user-feedback">'
+      +'<div class="user-feedback-decline"><div class="user-feedback-label">The system said it couldn&rsquo;t answer this. Was that the right call?</div>'
+      +'<div class="user-feedback-btns">'
+      +'<button class="user-feedback-btn" data-decline="correct">&#10003; Yes &mdash; correct, no answer exists</button>'
+      +'<button class="user-feedback-btn" data-decline="incorrect">&#10007; No &mdash; an answer does exist, it should have found it</button>'
+      +'<button class="user-feedback-btn" data-decline="unsure">Not sure</button>'
       +'</div></div>'
-      +'<div class="rlhf-note"><textarea placeholder="Anything else worth noting? (optional)"></textarea>'
-      +'<button class="rlhf-submit">Submit</button></div></div>';
+      +'<div class="user-feedback-note"><textarea placeholder="Anything else worth noting? (optional)"></textarea>'
+      +'<button class="user-feedback-submit">Submit</button></div></div>';
   }
-  return '<div class="rlhf">'
-    +'<div class="rlhf-step0"><div class="rlhf-label">Was this answer correct?</div>'
-    +'<div class="rlhf-btns">'
-    +'<button class="rlhf-btn" data-rating="correct">&#10003; Correct</button>'
-    +'<button class="rlhf-btn" data-rating="partial">&#8211; Partially correct</button>'
-    +'<button class="rlhf-btn" data-rating="incorrect">&#10007; Incorrect</button>'
-    +'<button class="rlhf-btn" data-rating="vague">Vague &mdash; didn&rsquo;t really answer</button>'
+  return '<div class="user-feedback">'
+    +'<div class="user-feedback-step0"><div class="user-feedback-label">Was this answer correct?</div>'
+    +'<div class="user-feedback-btns">'
+    +'<button class="user-feedback-btn" data-rating="correct">&#10003; Correct</button>'
+    +'<button class="user-feedback-btn" data-rating="partial">&#8211; Partially correct</button>'
+    +'<button class="user-feedback-btn" data-rating="incorrect">&#10007; Incorrect</button>'
+    +'<button class="user-feedback-btn" data-rating="vague">Vague &mdash; didn&rsquo;t really answer</button>'
     +'</div></div>'
-    +'<div class="rlhf-step1"><div class="rlhf-label">Was the right info actually in the evidence or sources shown?</div>'
-    +'<div class="rlhf-btns">'
-    +'<button class="rlhf-btn" data-ev="yes">Yes</button>'
-    +'<button class="rlhf-btn" data-ev="no">No</button>'
-    +'<button class="rlhf-btn" data-ev="idk">I don&rsquo;t know</button>'
+    +'<div class="user-feedback-step1"><div class="user-feedback-label">Was the right info actually in the evidence or sources shown?</div>'
+    +'<div class="user-feedback-btns">'
+    +'<button class="user-feedback-btn" data-ev="yes">Yes</button>'
+    +'<button class="user-feedback-btn" data-ev="no">No</button>'
+    +'<button class="user-feedback-btn" data-ev="idk">I don&rsquo;t know</button>'
     +'</div></div>'
-    +'<div class="rlhf-chunkpick" style="display:none"></div>'
-    +'<div class="rlhf-note"><textarea placeholder="Anything else worth noting? (optional)"></textarea>'
-    +'<button class="rlhf-submit">Submit</button></div></div>';
+    +'<div class="user-feedback-chunkpick" style="display:none"></div>'
+    +'<div class="user-feedback-note"><textarea placeholder="Anything else worth noting? (optional)"></textarea>'
+    +'<button class="user-feedback-submit">Submit</button></div></div>';
 }
 // Only ever shown when the rep says "Yes" AND there's at least one
 // retrieved chunk to pick from (a structured-lookup-only answer has
@@ -525,7 +526,7 @@ function allSections(trace){
   return out;
 }
 function chunkPickHtml(sections){
-  let h='<div class="rlhf-label">Which chunk had the right info?</div><div class="chunkpick">';
+  let h='<div class="user-feedback-label">Which chunk had the right info?</div><div class="chunkpick">';
   sections.forEach((s,i)=>{
     h+='<button class="chunkpick-opt" data-idx="'+i+'"><span class="cid">#'+(i+1)+' '+esc(s.chunk_id)+'</span>'
       +'<span class="prev">'+esc((s.text||'').slice(0,140))+'&hellip;</span></button>';
@@ -534,42 +535,42 @@ function chunkPickHtml(sections){
   return h;
 }
 // The browser already has the FULL answer (d) in memory from the
-// original /ask response - passed straight through here so the RLHF
-// log entry is self-contained (answer, gates, evidence, audit trail)
+// original /ask response - passed straight through here so the user
+// feedback log entry is self-contained (answer, gates, evidence, audit trail)
 // rather than a bare query_id the reviewer has to go join elsewhere.
-function submitRlhf(queryId,question,rating,evidenceAnswer,confirmedChunkId,confirmedChunkRank,note,box,d){
-  fetch('/rlhf',{method:'POST',headers:{'Content-Type':'application/json'},
+function submitUserFeedback(queryId,question,rating,evidenceAnswer,confirmedChunkId,confirmedChunkRank,note,box,d){
+  fetch('/user-feedback',{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({query_id:queryId,question:question,rating:rating,evidence_answer:evidenceAnswer,
                          confirmed_chunk_id:confirmedChunkId,confirmed_chunk_rank:confirmedChunkRank,
                          note:note||'',answer:d.answer,gates:d.gates,trace:d.trace,
                          audit_trail:d.audit_trail,draft_answer:d.draft_answer,
                          verdict:d.verdict,quarantined:d.quarantined})})
     .then(r=>r.json()).then(res=>{
-      box.outerHTML='<div class="rlhf"><div class="rlhf-done">&#10003; Feedback recorded &mdash; logged as: '
+      box.outerHTML='<div class="user-feedback"><div class="user-feedback-done">&#10003; Feedback recorded &mdash; logged as: '
         +esc(res.leaf||'unclassified')+'</div></div>';
     }).catch(()=>{
-      box.outerHTML='<div class="rlhf"><div class="rlhf-done">&#10003; Feedback recorded</div></div>';
+      box.outerHTML='<div class="user-feedback"><div class="user-feedback-done">&#10003; Feedback recorded</div></div>';
     });
 }
 // Every query the agent answers gets a query_id from the server (see
-// _new_query_id in chat_ui.py); wireRlhf is what ties a rating back to
+// _new_query_id in chat_ui.py); wireUserFeedback is what ties a rating back to
 // that exact query. Two clicks (was it correct, was the evidence
 // there), then an optional note, mirrors the same two axes the golden
-// test set decision tree uses - see _rlhf_leaf() in chat_ui.py for how
+// test set decision tree uses - see _user_feedback_leaf() in chat_ui.py for how
 // the two answers get combined into one of its leaves.
-function wireRlhf(node,queryId,question,d){
-  const box=node.querySelector('.rlhf');
+function wireUserFeedback(node,queryId,question,d){
+  const box=node.querySelector('.user-feedback');
   if(!box)return;
-  const noteBox=box.querySelector('.rlhf-note');
+  const noteBox=box.querySelector('.user-feedback-note');
   let rating=null, evidenceAnswer=null, confirmedChunkId=null, confirmedChunkRank=null;
 
-  const declineStep=box.querySelector('.rlhf-decline');
+  const declineStep=box.querySelector('.user-feedback-decline');
   if(declineStep){
     // Decline flow: one click, no evidence question at all - evidence
     // is always sent as 'no' since a decline means nothing was used,
-    // so there's nothing for the rep to confirm. See rlhfHtml() above.
+    // so there's nothing for the rep to confirm. See userFeedbackHtml() above.
     const DECLINE_MAP={correct:['correct','no'],incorrect:['incorrect','no'],unsure:['partial','idk']};
-    declineStep.querySelectorAll('.rlhf-btn').forEach(btn=>{
+    declineStep.querySelectorAll('.user-feedback-btn').forEach(btn=>{
       btn.onclick=()=>{
         const pair=DECLINE_MAP[btn.dataset.decline];
         rating=pair[0]; evidenceAnswer=pair[1];
@@ -578,16 +579,16 @@ function wireRlhf(node,queryId,question,d){
       };
     });
   } else {
-    const step0=box.querySelector('.rlhf-step0'), step1=box.querySelector('.rlhf-step1'),
-          chunkPick=box.querySelector('.rlhf-chunkpick');
-    step0.querySelectorAll('.rlhf-btn').forEach(btn=>{
+    const step0=box.querySelector('.user-feedback-step0'), step1=box.querySelector('.user-feedback-step1'),
+          chunkPick=box.querySelector('.user-feedback-chunkpick');
+    step0.querySelectorAll('.user-feedback-btn').forEach(btn=>{
       btn.onclick=()=>{
         rating=btn.dataset.rating;
         step0.style.display='none';
         step1.style.display='block';
       };
     });
-    step1.querySelectorAll('.rlhf-btn').forEach(btn=>{
+    step1.querySelectorAll('.user-feedback-btn').forEach(btn=>{
       btn.onclick=()=>{
         evidenceAnswer=btn.dataset.ev;
         step1.style.display='none';
@@ -610,9 +611,9 @@ function wireRlhf(node,queryId,question,d){
     });
   }
 
-  noteBox.querySelector('.rlhf-submit').onclick=()=>{
+  noteBox.querySelector('.user-feedback-submit').onclick=()=>{
     const note=noteBox.querySelector('textarea').value.trim();
-    submitRlhf(queryId,question,rating,evidenceAnswer,confirmedChunkId,confirmedChunkRank,note,box,d);
+    submitUserFeedback(queryId,question,rating,evidenceAnswer,confirmedChunkId,confirmedChunkRank,note,box,d);
   };
 }
 function addAnswer(d,question){
@@ -620,10 +621,10 @@ function addAnswer(d,question){
   let h='<div class="msg bot"><div class="who">Assistant</div><div class="bubble">'+md(d.answer);
   h+='<div class="gates">'+d.gates.map(gateHtml).join('')+'</div>';
   h+=detailsHtml(d);
-  h+=rlhfHtml(d.is_decline);
+  h+=userFeedbackHtml(d.is_decline);
   h+='</div></div>';
   const node=el(h); chat.appendChild(node); chat.scrollTop=chat.scrollHeight;
-  wireRlhf(node,d.query_id,question,d);
+  wireUserFeedback(node,d.query_id,question,d);
 }
 function addQuarantined(d,question){
   const last=(d.audit_trail||[]).slice(-1)[0]||{};
@@ -646,10 +647,10 @@ function addQuarantined(d,question){
       +'<div class="gates">'+d.gates.map(gateHtml).join('')+'</div>'
       +detailsHtml(d)
       +'<div class="qdecided" style="color:var(--ok)">&#10003; Released by reviewer (decision logged)</div>'
-      +rlhfHtml(d.is_decline)+'</div>';
-    // Only wire the RLHF widget once the answer is actually visible to
-    // a user - a rejected quarantined answer never gets a widget at all.
-    wireRlhf(node,d.query_id,question,d);
+      +userFeedbackHtml(d.is_decline)+'</div>';
+    // Only wire the user feedback widget once the answer is actually
+    // visible to a user - a rejected quarantined answer never gets a widget at all.
+    wireUserFeedback(node,d.query_id,question,d);
   };
   node.querySelector('.qreject').onclick=()=>{
     logReview(question,d,'rejected');
@@ -696,8 +697,8 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == "/review":
             self._handle_review()
             return
-        if self.path == "/rlhf":
-            self._handle_rlhf()
+        if self.path == "/user-feedback":
+            self._handle_user_feedback()
             return
         if self.path != "/ask":
             self.send_error(404)
@@ -729,9 +730,9 @@ class Handler(BaseHTTPRequestHandler):
             _log_query(query_id, question, "quarantined" if quarantined else "delivered",
                        result=result, gates=gates, evidence_view=ev,
                        preceding_context=prior_history)
-            # is_decline travels with the answer so the browser's RLHF
-            # widget can ask a DIFFERENT, more intuitive question when the
-            # system declined - see rlhfHtml()/wireRlhf() below. Computed
+            # is_decline travels with the answer so the browser's user
+            # feedback widget can ask a DIFFERENT, more intuitive question when the
+            # system declined - see userFeedbackHtml()/wireUserFeedback() below. Computed
             # once here (same _is_decline the golden test set uses) so the
             # client never has to re-implement the phrase check itself.
             body = json.dumps({
@@ -787,7 +788,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _handle_rlhf(self):
+    def _handle_user_feedback(self):
         """Records a human rating on an answer the user actually saw -
         correct / partially correct / incorrect / vague, plus the
         follow-up "was the right info in the evidence" answer. Every
@@ -812,7 +813,7 @@ class Handler(BaseHTTPRequestHandler):
                 evidence_answer = "idk"
             answer_text = str(payload.get("answer", ""))
             decline = _is_decline(answer_text)
-            leaf, color = _rlhf_leaf(rating, evidence_answer, decline)
+            leaf, color = _user_feedback_leaf(rating, evidence_answer, decline)
             # Which chunk (if any) the rep pointed to as having the right
             # info, and its rank among what was retrieved - the live-
             # traffic equivalent of the golden test set's rank signal.
@@ -841,7 +842,7 @@ class Handler(BaseHTTPRequestHandler):
                 "color": color,
                 "note": (str(payload.get("note", "")).strip()[:1000] or None),
             }
-            _append_jsonl(RLHF_LOG, entry)
+            _append_jsonl(USER_FEEDBACK_LOG, entry)
             body = json.dumps({"ok": True, "leaf": leaf, "color": color}, default=str).encode("utf-8")
             self.send_response(200)
         except Exception as e:
