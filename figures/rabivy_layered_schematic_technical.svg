@@ -1,4 +1,4 @@
-<svg viewBox="0 0 1450 2920" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif">
+<svg viewBox="0 0 1520 3110" xmlns="http://www.w3.org/2000/svg" font-family="Arial, Helvetica, sans-serif">
 <defs>
   <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
     <path d="M0,0 L10,5 L0,10 z" fill="#B5AFEB"/>
@@ -10,79 +10,93 @@
     <path d="M0,0 L10,5 L0,10 z" fill="#D85A30"/>
   </marker>
 </defs>
-<rect x="0" y="0" width="1450" height="2920" fill="#FFFFFF"/>
+<rect x="0" y="0" width="1520" height="3110" fill="#FFFFFF"/>
 <text x="40" y="42" font-size="24" font-weight="700" fill="#3D3870">Graphic breakdown of the full AI engine pipeline</text>
 <text x="40" y="64" font-size="13" fill="#7F77DD">Layer-by-layer breakdown of each file in the AI engine, showing how each layer talks to the one above and below it</text>
 
 <!-- ===================== LAYER 1: build the pieces ===================== -->
 <text x="40" y="98" font-size="12.5" font-weight="700" fill="#3D3870">Layer 1 - turn raw docs into searchable pieces</text>
-<rect x="330" y="110" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
-<rect x="330" y="110" width="220" height="6" fill="#7F77DD"/>
-<circle cx="550" cy="110" r="18" fill="#7F77DD"/>
-<text x="550" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
+<rect x="330" y="110" width="210" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="330" y="110" width="210" height="6" fill="#7F77DD"/>
+<circle cx="540" cy="110" r="18" fill="#7F77DD"/>
+<text x="540" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">1</text>
 <text x="342" y="156" font-size="13.5" font-weight="700" fill="#3D3870">1_chunk_documents.py</text>
-<text x="342" y="170" font-size="11" fill="#5A52B8">Splits every source document into</text>
-<text x="342" y="186" font-size="11" fill="#5A52B8">small, labeled, searchable pieces</text>
-<text x="342" y="202" font-size="11" fill="#5A52B8">- one per section or HCP card.</text>
-<text x="342" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: each HCP card's NPI must be</text>
-<text x="342" y="242" font-size="10" font-style="italic" fill="#A85D12">a real 10-digit number, or NPI lookups</text>
-<text x="342" y="257" font-size="10" font-style="italic" fill="#A85D12">fail silently later</text>
+<text x="342" y="170" font-size="11" fill="#5A52B8">Splits every source document</text>
+<text x="342" y="186" font-size="11" fill="#5A52B8">into small, labeled, searchable</text>
+<text x="342" y="202" font-size="11" fill="#5A52B8">pieces - one per section/card.</text>
+<text x="342" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: each HCP card's NPI must</text>
+<text x="342" y="242" font-size="10" font-style="italic" fill="#A85D12">be a real 10-digit number, or NPI</text>
+<text x="342" y="257" font-size="10" font-style="italic" fill="#A85D12">lookups fail silently later</text>
 
-<rect x="590" y="110" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
-<rect x="590" y="110" width="220" height="6" fill="#7F77DD"/>
-<circle cx="810" cy="110" r="18" fill="#7F77DD"/>
-<text x="810" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
-<text x="602" y="156" font-size="13.5" font-weight="700" fill="#3D3870">2_tag_chunks.py</text>
-<text x="602" y="170" font-size="11" fill="#5A52B8">Adds extra labels to each piece -</text>
-<text x="602" y="186" font-size="11" fill="#5A52B8">which competitor or brand it</text>
-<text x="602" y="202" font-size="11" fill="#5A52B8">mentions, if any.</text>
-<text x="602" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: whole-word matching only</text>
-<text x="602" y="242" font-size="10" font-style="italic" fill="#A85D12">(avoids false hits like Lillyanne)</text>
+<rect x="565" y="110" width="210" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="565" y="110" width="210" height="6" fill="#7F77DD"/>
+<circle cx="775" cy="110" r="18" fill="#7F77DD"/>
+<text x="775" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">2</text>
+<text x="577" y="156" font-size="13.5" font-weight="700" fill="#3D3870">2_tag_chunks.py</text>
+<text x="577" y="170" font-size="11" fill="#5A52B8">Adds extra labels to each piece</text>
+<text x="577" y="186" font-size="11" fill="#5A52B8">- which competitor or brand</text>
+<text x="577" y="202" font-size="11" fill="#5A52B8">it mentions, if any.</text>
+<text x="577" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: whole-word matching only</text>
+<text x="577" y="242" font-size="10" font-style="italic" fill="#A85D12">(avoids false hits like Lillyanne)</text>
 
-<rect x="850" y="110" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
-<rect x="850" y="110" width="220" height="6" fill="#7F77DD"/>
-<circle cx="1070" cy="110" r="18" fill="#7F77DD"/>
-<text x="1070" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">3</text>
-<text x="862" y="156" font-size="13.5" font-weight="700" fill="#3D3870">3_create_embeddings.py</text>
-<text x="862" y="170" font-size="11" fill="#5A52B8">Converts each labeled piece into a</text>
-<text x="862" y="186" font-size="11" fill="#5A52B8">list of numbers capturing its</text>
-<text x="862" y="202" font-size="11" fill="#5A52B8">meaning - for search-by-meaning.</text>
-<text x="862" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: downloads a small AI model</text>
-<text x="862" y="242" font-size="10" font-style="italic" fill="#A85D12">(~90MB) - needs internet once</text>
+<rect x="800" y="110" width="210" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="800" y="110" width="210" height="6" fill="#7F77DD"/>
+<circle cx="1010" cy="110" r="18" fill="#7F77DD"/>
+<text x="1010" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">3</text>
+<text x="812" y="156" font-size="13.5" font-weight="700" fill="#3D3870">3_create_embeddings.py</text>
+<text x="812" y="170" font-size="11" fill="#5A52B8">Converts each labeled piece into</text>
+<text x="812" y="186" font-size="11" fill="#5A52B8">a list of numbers capturing its</text>
+<text x="812" y="202" font-size="11" fill="#5A52B8">meaning - for search-by-meaning.</text>
+<text x="812" y="227" font-size="10" font-style="italic" fill="#A85D12">Watch: downloads a small AI model</text>
+<text x="812" y="242" font-size="10" font-style="italic" fill="#A85D12">(~90MB) - needs internet once</text>
 
-<!-- ===== embedding_backend.py - shared dependency, not a pipeline step ===== -->
-<rect x="1130" y="110" width="220" height="200" rx="6" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="1.5" stroke-dasharray="5,4"/>
-<text x="1146" y="138" font-size="13" font-weight="700" fill="#444441">embedding_backend.py</text>
-<text x="1146" y="156" font-size="11" fill="#5F5E5A">A backup for when the real embedding</text>
-<text x="1146" y="172" font-size="11" fill="#5F5E5A">model can't run - specifically why the</text>
-<text x="1146" y="188" font-size="11" fill="#5F5E5A">eval code works on GitHub, since GitHub</text>
-<text x="1146" y="204" font-size="11" fill="#5F5E5A">Actions has no internet to download it.</text>
-<text x="1146" y="226" font-size="10" font-style="italic" fill="#A85D12">Normal: all-MiniLM-L6-v2, same as</text>
-<text x="1146" y="240" font-size="10" font-style="italic" fill="#A85D12">before. Falls back to offline TF-IDF</text>
-<text x="1146" y="254" font-size="10" font-style="italic" fill="#A85D12">+LSA only if that model can't load -</text>
-<text x="1146" y="268" font-size="10" font-style="italic" fill="#A85D12">recorded in embedding_meta.json so</text>
-<text x="1146" y="282" font-size="10" font-style="italic" fill="#A85D12">query time always matches build time</text>
+<!-- ===== NEW box 4: BM25 keyword index - right after 3_create_embeddings.py; build step + query-time module named together ===== -->
+<rect x="1035" y="110" width="210" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
+<rect x="1035" y="110" width="210" height="6" fill="#7F77DD"/>
+<circle cx="1245" cy="110" r="18" fill="#7F77DD"/>
+<text x="1245" y="115" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">4</text>
+<text x="1047" y="150" font-size="13" font-weight="700" fill="#3D3870">4_create_bm25_index.py</text>
+<text x="1047" y="166" font-size="13" font-weight="700" fill="#3D3870">+ bm25_index.py</text>
+<text x="1047" y="186" font-size="11" fill="#5A52B8">Builds an inverted keyword</text>
+<text x="1047" y="202" font-size="11" fill="#5A52B8">index (BM25); the module is</text>
+<text x="1047" y="218" font-size="11" fill="#5A52B8">loaded back at query time.</text>
+<text x="1047" y="240" font-size="10" font-style="italic" fill="#A85D12">Watch: build writes the index,</text>
+<text x="1047" y="254" font-size="10" font-style="italic" fill="#A85D12">module reads it - keep in step</text>
 
-<!-- build-time call: box 3 -> embedding_backend (get_build_backend) -->
-<line x1="1070" y1="195" x2="1130" y2="195" stroke="#7F77DD" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
-<text x="1100" y="188" font-size="9" font-style="italic" fill="#5A52B8" text-anchor="middle">build</text>
+<!-- ===== embedding_backend.py - shared dependency, moved to the last slot in Layer 1, spaced clear of box 4 ===== -->
+<rect x="1270" y="110" width="210" height="200" rx="6" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="1.5" stroke-dasharray="5,4"/>
+<text x="1286" y="134" font-size="12.5" font-weight="700" fill="#444441">embedding_backend.py</text>
+<text x="1286" y="152" font-size="10.5" fill="#5F5E5A">Backup for when the real embedding</text>
+<text x="1286" y="167" font-size="10.5" fill="#5F5E5A">model can't run - specifically why</text>
+<text x="1286" y="182" font-size="10.5" fill="#5F5E5A">eval code works on GitHub, since it</text>
+<text x="1286" y="197" font-size="10.5" fill="#5F5E5A">has no internet to download it.</text>
+<text x="1286" y="220" font-size="10" font-style="italic" fill="#A85D12">Normal: all-MiniLM-L6-v2, same as</text>
+<text x="1286" y="234" font-size="10" font-style="italic" fill="#A85D12">before. Falls back to offline TF-IDF</text>
+<text x="1286" y="248" font-size="10" font-style="italic" fill="#A85D12">+LSA only if that model can't load -</text>
+<text x="1286" y="262" font-size="10" font-style="italic" fill="#A85D12">recorded in embedding_meta.json so</text>
+<text x="1286" y="276" font-size="10" font-style="italic" fill="#A85D12">query time always matches build time</text>
 
-<!-- query-time call: embedding_backend -> search_documents.py (Layer 4, box 6) -->
-<path d="M1240,310 V890 H700 V920" fill="none" stroke="#7F77DD" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
-<text x="970" y="880" font-size="9" font-style="italic" fill="#5A52B8" text-anchor="middle">query (search_documents.py)</text>
+<!-- build-time call: box 3 -> embedding_backend (get_build_backend). No longer adjacent (BM25 sits between them), so this arcs up and over box 4 instead of a short side-arrow - no inline label, too cramped there -->
+<path d="M905,110 V85 H1375 V110" fill="none" stroke="#7F77DD" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+
+<!-- query-time call: embedding_backend -> search_documents.py (Layer 4, box 7) -->
+<path d="M1375,310 V890 H700 V920" fill="none" stroke="#7F77DD" stroke-width="2" stroke-dasharray="6,4" marker-end="url(#arrow)"/>
+<text x="1038" y="880" font-size="9" font-style="italic" fill="#5A52B8" text-anchor="middle">query (search_documents.py)</text>
+
 <!-- converge into main.py -->
-<line x1="440" y1="280" x2="700" y2="380" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
-<line x1="700" y1="280" x2="700" y2="380" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
-<line x1="960" y1="280" x2="700" y2="380" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<line x1="435" y1="280" x2="700" y2="380" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<line x1="670" y1="280" x2="700" y2="380" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<line x1="905" y1="280" x2="700" y2="380" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
+<line x1="1140" y1="280" x2="700" y2="380" stroke="#B5AFEB" stroke-width="2.5" marker-end="url(#arrow)"/>
 
 <!-- ===================== LAYER 2: orchestrator ===================== -->
 <text x="40" y="358" font-size="12.5" font-weight="700" fill="#3D3870">Layer 2 - runs layer 1, in order</text>
 <rect x="590" y="380" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="590" y="380" width="220" height="6" fill="#7F77DD"/>
 <circle cx="810" cy="380" r="18" fill="#7F77DD"/>
-<text x="810" y="385" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">4</text>
+<text x="810" y="385" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">5</text>
 <text x="602" y="426" font-size="13.5" font-weight="700" fill="#3D3870">main.py</text>
-<text x="602" y="440" font-size="11" fill="#5A52B8">Runs the three build steps above,</text>
+<text x="602" y="440" font-size="11" fill="#5A52B8">Runs the four build steps above,</text>
 <text x="602" y="456" font-size="11" fill="#5A52B8">in order, and checks each one</text>
 <text x="602" y="472" font-size="11" fill="#5A52B8">actually worked before continuing.</text>
 <text x="602" y="497" font-size="10" font-style="italic" fill="#A85D12">Watch: rerun whenever source</text>
@@ -94,7 +108,7 @@
 <rect x="590" y="650" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="590" y="650" width="220" height="6" fill="#7F77DD"/>
 <circle cx="810" cy="650" r="18" fill="#7F77DD"/>
-<text x="810" y="655" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">5</text>
+<text x="810" y="655" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">6</text>
 <text x="602" y="696" font-size="13.5" font-weight="700" fill="#3D3870">output/ folder</text>
 <text x="602" y="710" font-size="11" fill="#5A52B8">What main.py actually produces -</text>
 <text x="602" y="726" font-size="11" fill="#5A52B8">a saved, ready-to-search copy of</text>
@@ -114,7 +128,7 @@
 <rect x="330" y="920" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="330" y="920" width="220" height="6" fill="#7F77DD"/>
 <circle cx="550" cy="920" r="18" fill="#7F77DD"/>
-<text x="550" y="925" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">7</text>
+<text x="550" y="925" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">9</text>
 <text x="342" y="966" font-size="13.5" font-weight="700" fill="#3D3870">query_spreadsheet.py</text>
 <text x="342" y="980" font-size="11" fill="#5A52B8">The structured query engine.</text>
 <text x="342" y="996" font-size="11" fill="#5A52B8">Looks up ranking / counting /</text>
@@ -125,13 +139,29 @@
 <rect x="590" y="920" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="590" y="920" width="220" height="6" fill="#7F77DD"/>
 <circle cx="810" cy="920" r="18" fill="#7F77DD"/>
-<text x="810" y="925" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">6</text>
+<text x="810" y="925" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">7</text>
 <text x="602" y="966" font-size="13.5" font-weight="700" fill="#3D3870">search_documents.py</text>
 <text x="602" y="980" font-size="11" fill="#5A52B8">The document search engine.</text>
 <text x="602" y="996" font-size="11" fill="#5A52B8">Finds the most relevant chunks</text>
 <text x="602" y="1012" font-size="11" fill="#5A52B8">for a narrative question.</text>
 <text x="602" y="1037" font-size="10" font-style="italic" fill="#A85D12">Watch: needs the build steps run</text>
 <text x="602" y="1052" font-size="10" font-style="italic" fill="#A85D12">first, or there is nothing to search</text>
+
+<!-- ===== NEW box 8: reranker_backend.py - solid, gold top, sits beside search_documents.py which calls it ===== -->
+<rect x="850" y="920" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#F5E6B8" stroke-width="2"/>
+<rect x="850" y="920" width="220" height="6" fill="#D4AF37"/>
+<circle cx="1070" cy="920" r="18" fill="#D4AF37"/>
+<text x="1070" y="925" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">8</text>
+<text x="862" y="966" font-size="13.5" font-weight="700" fill="#3D3870">reranker_backend.py</text>
+<text x="862" y="980" font-size="11" fill="#5A52B8">Cross-encoder re-scores the</text>
+<text x="862" y="996" font-size="11" fill="#5A52B8">top 20 RRF-fused candidates</text>
+<text x="862" y="1012" font-size="11" fill="#5A52B8">by jointly encoding pairs.</text>
+<text x="862" y="1037" font-size="10" font-style="italic" fill="#A85D12">Watch: slow per-pair - only runs</text>
+<text x="862" y="1052" font-size="10" font-style="italic" fill="#A85D12">on the top 20, not the full set</text>
+
+<text x="830" y="985" font-size="9" font-style="italic" fill="#5A52B8" text-anchor="middle">query</text>
+<text x="830" y="997" font-size="9" font-style="italic" fill="#5A52B8" text-anchor="middle">time</text>
+<line x1="850" y1="1012" x2="810" y2="1012" stroke="#7F77DD" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
 
 <!-- merge bus into layer 5 -->
 <line x1="440" y1="1090" x2="440" y2="1140" stroke="#B5AFEB" stroke-width="2"/>
@@ -149,7 +179,7 @@
 <rect x="300" y="1190" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="300" y="1190" width="220" height="6" fill="#7F77DD"/>
 <circle cx="520" cy="1190" r="18" fill="#7F77DD"/>
-<text x="520" y="1195" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">8</text>
+<text x="520" y="1195" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">10</text>
 <text x="312" y="1236" font-size="13.5" font-weight="700" fill="#3D3870">ask_a_question.py</text>
 <text x="312" y="1250" font-size="11" fill="#5A52B8">Reads a question with regex rules,</text>
 <text x="312" y="1266" font-size="11" fill="#5A52B8">decides which engine(s) it needs,</text>
@@ -160,7 +190,7 @@
 <rect x="560" y="1190" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="560" y="1190" width="220" height="6" fill="#7F77DD"/>
 <circle cx="780" cy="1190" r="18" fill="#7F77DD"/>
-<text x="780" y="1195" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">9</text>
+<text x="780" y="1195" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">11</text>
 <text x="572" y="1236" font-size="13.5" font-weight="700" fill="#3D3870">test_the_system.py</text>
 <text x="572" y="1250" font-size="11" fill="#5A52B8">Runs a batch of real questions</text>
 <text x="572" y="1266" font-size="11" fill="#5A52B8">through the router automatically</text>
@@ -171,7 +201,7 @@
 <rect x="820" y="1190" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="820" y="1190" width="220" height="6" fill="#D85A30"/>
 <circle cx="1040" cy="1190" r="18" fill="#D85A30"/>
-<text x="1040" y="1195" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">10</text>
+<text x="1040" y="1195" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">12</text>
 <text x="832" y="1236" font-size="13.5" font-weight="700" fill="#3D3870">agent_tools.py</text>
 <text x="832" y="1250" font-size="11" fill="#5A52B8">The bridge - turns a tool call the</text>
 <text x="832" y="1266" font-size="11" fill="#5A52B8">agent picks into a real call on the</text>
@@ -179,11 +209,11 @@
 <text x="832" y="1307" font-size="10" font-style="italic" fill="#A85D12">Watch: this is the file that breaks</text>
 <text x="832" y="1322" font-size="10" font-style="italic" fill="#A85D12">first if the engines' functions change</text>
 
-<!-- test_the_agent.py - renumbered 11, mirrors test_the_system.py's placement beside its path -->
+<!-- test_the_agent.py - box 13, mirrors test_the_system.py's placement beside its path -->
 <rect x="1080" y="1190" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="1080" y="1190" width="220" height="6" fill="#D85A30"/>
 <circle cx="1300" cy="1190" r="18" fill="#D85A30"/>
-<text x="1300" y="1195" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">11</text>
+<text x="1300" y="1195" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">13</text>
 <text x="1092" y="1236" font-size="13.5" font-weight="700" fill="#3D3870">test_the_agent.py</text>
 <text x="1092" y="1250" font-size="11" fill="#5A52B8">Runs the same 30 questions</text>
 <text x="1092" y="1266" font-size="11" fill="#5A52B8">through the agent and scores</text>
@@ -207,7 +237,7 @@
 <rect x="560" y="1460" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="560" y="1460" width="220" height="6" fill="#D85A30"/>
 <circle cx="780" cy="1460" r="18" fill="#D85A30"/>
-<text x="780" y="1465" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">13</text>
+<text x="780" y="1465" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">15</text>
 <text x="572" y="1506" font-size="13.5" font-weight="700" fill="#3D3870">llm_client.py</text>
 <text x="572" y="1520" font-size="11" fill="#5A52B8">Talks to Claude for real.</text>
 <text x="572" y="1534" font-size="11" fill="#5A52B8">agent.py calls this twice:</text>
@@ -220,7 +250,7 @@
 <rect x="820" y="1460" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="820" y="1460" width="220" height="6" fill="#D85A30"/>
 <circle cx="1040" cy="1460" r="18" fill="#D85A30"/>
-<text x="1040" y="1465" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">12</text>
+<text x="1040" y="1465" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">14</text>
 <text x="832" y="1506" font-size="13.5" font-weight="700" fill="#3D3870">agent.py</text>
 <text x="832" y="1520" font-size="11" fill="#5A52B8">Routes the question to a tool,</text>
 <text x="832" y="1536" font-size="11" fill="#5A52B8">writes the answer, then checks its</text>
@@ -234,7 +264,7 @@
 <rect x="820" y="1730" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="820" y="1730" width="220" height="6" fill="#D85A30"/>
 <circle cx="1040" cy="1730" r="18" fill="#D85A30"/>
-<text x="1040" y="1735" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">14</text>
+<text x="1040" y="1735" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">16</text>
 <text x="832" y="1776" font-size="13.5" font-weight="700" fill="#3D3870">chat_ui.py</text>
 <text x="832" y="1790" font-size="11" fill="#5A52B8">A local browser console showing</text>
 <text x="832" y="1806" font-size="11" fill="#5A52B8">the answer plus pass/fail gates and</text>
@@ -250,7 +280,7 @@
 <rect x="820" y="2000" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="820" y="2000" width="220" height="6" fill="#D85A30"/>
 <circle cx="1040" cy="2000" r="18" fill="#D85A30"/>
-<text x="1040" y="2005" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">15</text>
+<text x="1040" y="2005" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">17</text>
 <text x="832" y="2046" font-size="13.5" font-weight="700" fill="#3D3870">Logging &amp; feedback</text>
 <text x="832" y="2060" font-size="11" fill="#5A52B8">Logs every real question and</text>
 <text x="832" y="2076" font-size="11" fill="#5A52B8">answer chat_ui.py handles. Under</text>
@@ -266,22 +296,22 @@
 <rect x="820" y="2270" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="820" y="2270" width="220" height="6" fill="#D85A30"/>
 <circle cx="1040" cy="2270" r="18" fill="#D85A30"/>
-<text x="1040" y="2275" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">17</text>
+<text x="1040" y="2275" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">19</text>
 <text x="832" y="2316" font-size="13.5" font-weight="700" fill="#3D3870">build_dashboard.py</text>
 <text x="832" y="2330" font-size="11" fill="#5A52B8">Builds one dashboard page, three</text>
 <text x="832" y="2346" font-size="11" fill="#5A52B8">tabs: golden-set results (steps</text>
-<text x="832" y="2362" font-size="11" fill="#5A52B8">9 &amp; 11), every live question,</text>
+<text x="832" y="2362" font-size="11" fill="#5A52B8">11 &amp; 13), every live question,</text>
 <text x="832" y="2378" font-size="11" fill="#5A52B8">and every rep rating.</text>
 <text x="832" y="2403" font-size="10" font-style="italic" fill="#A85D12">Watch: chat_ui.py also relies on</text>
 <text x="832" y="2418" font-size="10" font-style="italic" fill="#A85D12">this file directly, not just a report</text>
 
-<!-- ===================== Agent Batch Review - judge_loop.py + human_review_ui.py. An OFFSHOOT of Layer 8 (it batch-reviews live queries straight from chat_ui.py's log/box 15), not something Layer 9 produces - branches off the same log line box 15 receives, sits beside it, not beside build_dashboard.py ===================== -->
+<!-- ===================== Agent Batch Review - judge_loop.py + human_review_ui.py. An OFFSHOOT of Layer 8 (it batch-reviews live queries straight from chat_ui.py's log/box 17), not something Layer 9 produces - branches off the same log line box 17 receives, sits beside it, not beside build_dashboard.py ===================== -->
 <path d="M930,1950 H670 V2000" fill="none" stroke="#D85A30" stroke-width="2.5" marker-end="url(#arrowRed)"/>
 
 <rect x="560" y="2000" width="220" height="170" rx="6" fill="#FFFFFF" stroke="#E8E5FA" stroke-width="2"/>
 <rect x="560" y="2000" width="220" height="6" fill="#D85A30"/>
 <circle cx="780" cy="2000" r="18" fill="#D85A30"/>
-<text x="780" y="2005" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">16</text>
+<text x="780" y="2005" font-size="14" font-weight="700" fill="#FFFFFF" text-anchor="middle">18</text>
 <text x="572" y="2046" font-size="13.5" font-weight="700" fill="#3D3870">judge_loop.py</text>
 <text x="572" y="2060" font-size="11" fill="#5A52B8">Passes a 90% entrance exam,</text>
 <text x="572" y="2076" font-size="11" fill="#5A52B8">then batch-reviews a sample of</text>
@@ -380,5 +410,16 @@
 <line x1="1005" y1="2710" x2="1005" y2="2730" stroke="#B4B2A9" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
 <line x1="1285" y1="2710" x2="1285" y2="2730" stroke="#B4B2A9" stroke-width="2" stroke-dasharray="5,4" marker-end="url(#arrow)"/>
 <text x="1145" y="2703" font-size="9" font-style="italic" fill="#8A8879" text-anchor="middle">feeds both article evals</text>
+
+<!-- ===== NEW row 3: test_judge_loop.py - a standalone free check that was missed last render ===== -->
+<rect x="600" y="2920" width="250" height="150" rx="6" fill="#F1EFE8" stroke="#B4B2A9" stroke-width="1.5" stroke-dasharray="5,4"/>
+<text x="616" y="2948" font-size="13" font-weight="700" fill="#444441">test_judge_loop.py</text>
+<text x="616" y="2968" font-size="11" fill="#5F5E5A">Free, no-LLM tests over</text>
+<text x="616" y="2984" font-size="11" fill="#5F5E5A">judge_loop.py's pure logic: mock</text>
+<text x="616" y="3000" font-size="11" fill="#5F5E5A">judge, entrance-exam scoring,</text>
+<text x="616" y="3016" font-size="11" fill="#5F5E5A">kappa math, and that --build-gold</text>
+<text x="616" y="3032" font-size="11" fill="#5F5E5A">never mutates real index files.</text>
+<text x="616" y="3050" font-size="9" font-style="italic" fill="#7F77DD">also covers human_review_ui.py's</text>
+<text x="616" y="3062" font-size="9" font-style="italic" fill="#7F77DD">vote/supersede rule</text>
 
 </svg>

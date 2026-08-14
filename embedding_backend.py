@@ -4,20 +4,25 @@
 # (3_create_embeddings.py) and the search step (search_documents.py)
 # can never drift apart on that decision.
 #
-# Primary backend : sentence-transformers all-MiniLM-L6-v2 (unchanged
-#                   from the original design - used whenever the model
-#                   is available locally or downloadable).
-# Fallback backend: TF-IDF + truncated SVD (LSA), fully offline. Used
-#                   automatically when the MiniLM model can't be loaded
-#                   (e.g. sandboxed environments with no HuggingFace
-#                   access). The fitted vectorizer is persisted to
-#                   output/ so queries at search time are encoded in
-#                   the SAME vector space as the chunks were.
+# The desired model : sentence-transformers all-MiniLM-L6-v2 (unchanged
+#                   from the original design). This is the real,
+#                   preferred embedding model - used whenever it's
+#                   available locally or downloadable. It is NOT itself
+#                   a "backend" in this file's terminology below - it's
+#                   the thing this whole pipeline actually wants to run.
+# The fallback backend: TF-IDF + truncated SVD (LSA), fully offline. This
+#                   IS "the backend" - an emergency stand-in, used
+#                   automatically only when the desired model can't be
+#                   loaded (e.g. sandboxed environments with no
+#                   HuggingFace access). The fitted vectorizer is
+#                   persisted to output/ so queries at search time are
+#                   encoded in the SAME vector space as the chunks were.
 #
-# Both backends expose the same two-method interface:
+# The desired model and the fallback backend expose the same two-method
+# interface, so nothing downstream needs to know which one actually ran:
 #   fit_encode(texts) -> np.ndarray   (build time: may fit, then encode)
 #   encode(texts)     -> np.ndarray   (query time: encode only)
-# embedding_meta.json records which backend produced the vectors, and
+# embedding_meta.json records which one produced the vectors, and
 # search_documents.py loads the matching one - a MiniLM index is never
 # silently queried with TF-IDF vectors or vice versa.
 # -------------------------------------------------------------------
@@ -33,7 +38,10 @@ _FALLBACK_PATH = os.path.join("output", "tfidf_backend.joblib")
 _FALLBACK_DIM = 384  # same dimensionality as MiniLM, for a like-for-like store
 
 
-class MiniLMBackend:
+class MiniLMModel:
+    """The real, desired embedding model - not a "backend" or stand-in,
+    this is the thing the pipeline is actually meant to run."""
+
     name = MINILM_NAME
 
     def __init__(self):
@@ -47,7 +55,7 @@ class MiniLMBackend:
         return self._model.encode(texts)
 
 
-class TfidfLsaBackend:
+class FallbackBackend:
     """Offline stand-in: TF-IDF over word 1-2 grams, compressed to a
     dense vector by SPARSE RANDOM PROJECTION, L2-normalised.
 
@@ -103,24 +111,26 @@ def _sk_normalize(sparse_matrix):
 
 
 def get_build_backend():
-    """Build time: prefer MiniLM, fall back to TF-IDF/LSA with a loud,
-    explicit message (never a silent substitution)."""
+    """Build time: prefer the real MiniLM model, fall back to the
+    TF-IDF/LSA backend with a loud, explicit message (never a silent
+    substitution)."""
     try:
-        backend = MiniLMBackend()
-        print(f"Embedding backend: {backend.name}")
-        return backend
+        model = MiniLMModel()
+        print(f"Embedding model in use: {model.name}")
+        return model
     except Exception as e:
         print(f"! MiniLM unavailable ({type(e).__name__}: {str(e)[:120]})")
         print(f"! Falling back to offline backend: {FALLBACK_NAME}")
-        return TfidfLsaBackend()
+        return FallbackBackend()
 
 
 def get_query_backend():
-    """Search time: load whichever backend embedding_meta.json says
-    actually built the vector store - never guess."""
+    """Search time: load whichever one (real model or fallback backend)
+    embedding_meta.json says actually built the vector store - never
+    guess."""
     with open(os.path.join("output", "embedding_meta.json"), encoding="utf-8") as f:
         meta = json.load(f)
     model_name = meta.get("model", MINILM_NAME)
     if model_name == FALLBACK_NAME:
-        return TfidfLsaBackend()
-    return MiniLMBackend()
+        return FallbackBackend()
+    return MiniLMModel()

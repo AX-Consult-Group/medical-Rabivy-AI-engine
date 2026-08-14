@@ -1,7 +1,7 @@
 # main.py
 # -------------------------------------------------------------------
 # Orchestrator: runs the pipeline stages in order, each feeding the next.
-#   1_chunk_documents.py -> 2_tag_chunks.py -> 3_create_embeddings.py -> (query_spreadsheet.py sanity check)
+#   1_chunk_documents.py -> 2_tag_chunks.py -> 3_create_embeddings.py -> 4_create_bm25_index.py -> (query_spreadsheet.py sanity check)
 # Run this one file to rebuild the whole knowledge base from scratch.
 # (search_documents.py, ask_a_question.py, and test_the_system.py are
 # run separately, once the base is built.)
@@ -35,6 +35,11 @@ STAGES = [
     {
         "script": "3_create_embeddings.py",
         "check_path": "output/embeddings.npy",
+        "min_size": 100,
+    },
+    {
+        "script": "4_create_bm25_index.py",
+        "check_path": "output/bm25_index.pkl",
         "min_size": 100,
     },
 ]
@@ -78,10 +83,10 @@ for stage in STAGES:
     start = time.time()
     # Run the stage as its own script; stop everything if one fails.
     # subprocess.run (not import) is deliberate: 1_chunk_documents.py /
-    # 2_tag_chunks.py / 3_create_embeddings.py are top-level scripts,
-    # not wrapped in functions, so importing them would run their code
-    # anyway while tangling namespaces together and making a failure in
-    # one script harder to isolate from the next.
+    # 2_tag_chunks.py / 3_create_embeddings.py / 4_create_bm25_index.py
+    # are top-level scripts, not wrapped in functions, so importing them
+    # would run their code anyway while tangling namespaces together and
+    # making a failure in one script harder to isolate from the next.
     result = subprocess.run([sys.executable, script])
     if result.returncode != 0:
         print(f"\n!!! {script} failed (exit code {result.returncode}). Pipeline stopped.")

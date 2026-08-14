@@ -376,6 +376,17 @@ def _search_documents(inp):
     # own default and the "found within top 5" bar the eval scripts
     # (test_retrieval_ranking.py, test_article_retrieval.py) already use -
     # the agent's default was quietly stricter than what the eval measured.
+    # 2026-08-13: also forwards bm25_score now (present only when hybrid
+    # search actually ran - see search_documents.py) alongside the
+    # existing "similarity" (embedding cosine score) - two different,
+    # non-comparable numbers, kept separate rather than blended into
+    # one, so nothing downstream (the model, the human-facing trace)
+    # has to guess which kind of match a result came from.
+    # 2026-08-14: also forwards rerank_score (step 6, the cross-encoder
+    # reranker) - present only when reranker_backend.py's model loaded
+    # successfully. All three numbers travel together from here on;
+    # which ones actually get SHOWN to a rep is a display decision made
+    # further downstream (ask_a_question.py / chat_ui.py), not here.
     top_k = min(int(inp.get("top_k", 5)), 8)
     data = search_documents.semantic_search(
         inp["query"], state=inp.get("state"), top_k=top_k)
@@ -390,6 +401,8 @@ def _search_documents(inp):
              "doc": r["chunk"].get("source_doc"),
              "heading": r["chunk"].get("heading"),
              "similarity": (round(r["score"], 3) if r["score"] is not None else None),
+             "bm25_score": (round(r["bm25_score"], 3) if r.get("bm25_score") is not None else None),
+             "rerank_score": (round(r["rerank_score"], 3) if r.get("rerank_score") is not None else None),
              "text": r["chunk"]["text"][:1500]}
             for r in data["results"]
         ],

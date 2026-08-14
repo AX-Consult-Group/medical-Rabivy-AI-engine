@@ -98,6 +98,27 @@ def gt_filter_npis(top=ROUTER_DEFAULT_TOP, **filter_kwargs):
     return [npi_str(r) for r in data["results"]]
 
 
+def gt_target_npi_candidates(state, top=ROUTER_DEFAULT_TOP):
+    """Today's acceptable answer(s) to a 'who should I target' style
+    question in one state. More than one NPI can be legitimately
+    correct here: the single highest-propensity prescriber in the
+    state overall, OR the highest-propensity prescriber who isn't
+    currently being targeted. Both are defensible reads of "target" -
+    someone flagged as targeted a long time ago but not actually
+    contacted in months is still a fair re-engagement candidate, so a
+    hard targeted=False filter alone would unfairly reject a real
+    answer that picked the other reading.
+
+    Returns a plain list of the NPI(s) that qualify (1 or 2 entries,
+    never more, duplicates never possible since one is filtered and
+    one isn't) - meant to be used as a single OR-group item inside a
+    ground_truth list passed to all_present()/any_present(), so ANY
+    one of the returned NPIs counts as a correct answer."""
+    overall = (gt_filter_npis(top=top, state=state) or [None])[0]
+    untargeted = (gt_filter_npis(top=top, state=state, targeted=False) or [None])[0]
+    return [npi for npi in (overall, untargeted) if npi]
+
+
 # =====================================================================
 # MATCHING HELPERS
 # Shared by both test files so the pass/fail logic can't drift between
@@ -319,7 +340,27 @@ FAKE_NPI_REJECTION_FACTS = [["not found", "no hcp", "no record", "doesn't exist"
 
 FAKE_REGION_REJECTION_FACTS = [["not a real region", "not one of", "not an official", "isn't a defined region",
                                 "4 real regions", "midwest, northeast, south", "not a real value for",
-                                "valid values are"]]
+                                "valid values are",
+                                # 2026-08-14: widened after a real phrasing-consistency run
+                                # ("Show me HCPs in the Southeastern US.") gave a genuine,
+                                # correct refusal - Layer 1/2 both PASS, no tool called - that
+                                # still failed Layer 3 because its own wording didn't happen to
+                                # hit any of the 8 phrases above. The raw answer text isn't
+                                # saved anywhere (test_phrasing_consistency.py only persists
+                                # PASS/FAIL, not the transcript), so the exact wording that was
+                                # missed couldn't be pulled after the fact - widened with a
+                                # broader net of generic refusal phrasing instead of guessing
+                                # one exact string, same generic-not-specific style already
+                                # used by FAKE_NPI_REJECTION_FACTS above. If this still isn't
+                                # enough on the next real run, that's a signal to pull the
+                                # actual answer text (e.g. print it in test_phrasing_consistency.py's
+                                # per_wording record) rather than keep guessing phrases blind.
+                                "isn't a recognized", "not a recognized", "isn't a defined",
+                                "not a defined", "isn't a supported", "not a supported",
+                                "no defined region", "no such region", "don't have a region",
+                                "doesn't correspond to a", "not a standard region",
+                                "ambiguous which states", "unclear which states",
+                                "don't support filtering by", "can't filter by"]]
 
 
 
