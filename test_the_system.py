@@ -403,7 +403,8 @@ def _narrative_retrieval_detail(data, expected_tags):
         if is_expected and rank is None:
             rank = i
         top_results.append({"chunk_id": chunk_id, "similarity": r.get("score"),
-                            "is_expected": is_expected})
+                            "bm25_score": r.get("bm25_score"),
+                            "rerank_score": r.get("rerank_score"), "is_expected": is_expected})
     return {"expected_tag": expected_tags, "rank": rank, "top_results": top_results}
 
 

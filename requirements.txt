@@ -8,5 +8,8 @@ sentence-transformers   # primary embedding model (all-MiniLM-L6-v2)
 scikit-learn
 joblib
 
+# Keyword search index (bm25_index.py) - hybrid search, second half
+rank-bm25
+
 # Agentic layer
 anthropic

@@ -122,6 +122,8 @@ def _evidence_view(evidence):
             view["low_confidence"] = bool(res.get("low_confidence"))
             view["sections"] = [
                 {"chunk_id": s["chunk_id"], "similarity": s.get("similarity"),
+                 "bm25_score": s.get("bm25_score"),
+                 "rerank_score": s.get("rerank_score"),
                  "text": (s.get("text") or "")[:4000]}
                 for s in res["sections"]
             ]
@@ -130,7 +132,7 @@ def _evidence_view(evidence):
             view["rows"] = [res["row"]]
             if "snapshot_card" in res:
                 view["sections"] = [{"chunk_id": res["snapshot_card"]["chunk_id"],
-                                     "similarity": None,
+                                     "similarity": None, "bm25_score": None, "rerank_score": None,
                                      "text": res["snapshot_card"]["text"][:4000]}]
         elif "error" in res:
             view["summary"] = f"ERROR: {res['error']}"
@@ -340,7 +342,7 @@ PAGE = r"""<!DOCTYPE html>
   .chunk{border-left:3px solid var(--brand);background:var(--brand-bg);border-radius:0 8px 8px 0;
          padding:6px 10px;margin:5px 0;font-size:11.5px}
   .chunk .cid{font-family:var(--mono);font-size:10.5px;color:var(--brand);font-weight:700}
-  .chunk .sim{color:var(--muted);font-size:10.5px}
+  .chunk .rank{color:var(--brand);font-size:10.5px;cursor:help;font-weight:700;font-family:var(--mono)}
   .chunk .ctext{max-height:220px;overflow-y:auto;margin-top:4px}
   .chunkpick{display:flex;flex-direction:column;gap:6px;margin:6px 0}
   .chunkpick-opt{text-align:left;border:1.5px solid var(--line);border-radius:8px;background:#fff;
@@ -437,10 +439,20 @@ function traceHtml(d){
     h+='<div class="tsummary'+(v.low_confidence?' lowconf':'')+'">'+esc(v.summary)+'</div>';
     h+=rowsTable(v.rows);
     if(v.more_rows)h+='<div class="tsummary">&hellip; and '+v.more_rows+' more row(s)</div>';
-    for(const s of (v.sections||[])){
+    // 2026-08-14: reps don't need any raw score (embedding cosine, BM25,
+    // or the reranker's own number) - just where a result landed in the
+    // final order. Rank position already IS that order (search_documents.py
+    // always returns results pre-sorted best-first), so showing "#1",
+    // "#2", ... works whether hybrid search/reranking ran or not - no
+    // conditional needed, and nothing here to misread as a score scale
+    // that doesn't mean what it looks like it means. The full sem/kw/
+    // rerank breakdown, for diagnosing WHY something ranked where it
+    // did, lives in the dashboard's candidate table instead.
+    const sections = v.sections||[];
+    for(let idx=0; idx<sections.length; idx++){
+      const s = sections[idx];
       const cut = (s.text||'').length >= 4000;
-      h+='<div class="chunk"><span class="cid">'+esc(s.chunk_id)+'</span>'
-        +(s.similarity!=null?' <span class="sim">similarity '+s.similarity+'</span>':'')
+      h+='<div class="chunk"><span class="rank" title="Position '+(idx+1)+' in the final result order - meaning-based match, keyword match, and (when available) a final relevance re-check are already combined into this order, so rank is what matters here, not any single raw score.">#'+(idx+1)+'</span> <span class="cid">'+esc(s.chunk_id)+'</span>'
         +'<div class="ctext">'+esc(s.text)+(cut?'&hellip;':'')+'</div></div>';
     }
     h+='</div>';

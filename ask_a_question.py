@@ -1349,12 +1349,39 @@ def format_answer(route, data):
     elif kind == "semantic_search":
         if data.get("low_confidence") or not data.get("results"):
             return "Answer not found. No confident match in the documents for this question."
-        lines = ["Sorted by relevance to your question (highest similarity score first)."]
+        # 2026-08-13: results are fused (meaning-match + keyword-match,
+        # combined by rank position, not by score) whenever bm25_score is
+        # present - so the list is no longer simply "highest similarity
+        # score first." Said honestly here instead of leaving the old
+        # claim in place once it stopped being true - see the "sem"/
+        # "kw" line below for what each printed number actually means.
+        # 2026-08-14: step 6 added a cross-encoder reranker on top of
+        # that fused shortlist. Til's call, generalised from the reranker
+        # case to every case here: a rep doesn't need to see any raw
+        # score (embedding cosine, BM25, or the reranker's own number,
+        # which isn't even on a 0-1 scale - it can print as a deep
+        # negative and mean nothing to someone reading it). What matters
+        # is just WHERE a result landed - so every result is labelled
+        # by its rank position ("[#1]", "[#2]", ...) instead, which is
+        # already meaningful whether hybrid search/reranking ran or not.
+        # The full sem/kw/rerank score breakdown, for diagnosing WHY
+        # something ranked where it did, lives in the dashboard's
+        # candidate table instead.
+        has_rerank = any(r.get("rerank_score") is not None for r in data["results"])
+        has_bm25 = any(r.get("bm25_score") is not None for r in data["results"])
+        if has_rerank:
+            lines = ["Sorted by relevance (#1 = best match) - combines meaning-based "
+                     "match, keyword match, and a final relevance re-check into one order."]
+        elif has_bm25:
+            lines = ["Sorted by relevance (#1 = best match) - combines meaning-based "
+                     "match and keyword match into one order."]
+        else:
+            lines = ["Sorted by relevance to your question (#1 = best match)."]
         if data.get("confidence") == "moderate":
             lines.append("(Note: confidence in this match is modest - worth checking the "
                           "source document before relying on it heavily.)")
-        for r in data["results"]:
-            lines.append(f"[{r['score']:.3f}] {r['chunk']['text'][:300]}")
+        for i, r in enumerate(data["results"], start=1):
+            lines.append(f"[#{i}] {r['chunk']['text'][:300]}")
         answer = "\n\n".join(lines)
 
     elif kind == "comparison":

@@ -29,9 +29,9 @@ Every file below is arranged in layers - each layer only ever talks to the layer
 
 ## Layer by layer
 
-**Layer 1 - turns raw documents into searchable pieces.** Three scripts run once, in order, to prepare the knowledge base: `1_chunk_documents.py` splits every source document in the `docs/` folder into small, labeled pieces (one chunk per section or HCP card); `2_tag_chunks.py` adds extra labels to the chunks so they are easily traceable; `3_create_embeddings.py` converts each piece into a vector of numbers that captures its meaning, so the system can search by meaning, not just keywords.
+**Layer 1 - turns raw documents into searchable pieces.** Four scripts run once, in order, to prepare the knowledge base: `1_chunk_documents.py` splits every source document in the `docs/` folder into small, labeled pieces (one chunk per section or HCP card); `2_tag_chunks.py` adds extra labels to the chunks so they are easily traceable; `3_create_embeddings.py` converts each piece into a vector of numbers that captures its meaning, so the system can search by meaning, not just keywords; `4_create_bm25_index.py` builds a BM25 keyword index over the same narrative pieces (HCP cards excluded), so the system can also match on exact words and numbers a meaning-based search can miss.
 
-**Layer 2 - the orchestrator.** `main.py` runs all three Layer 1 steps in the correct order, checking after each one that it actually worked before moving on. This is the one file to run to rebuild the knowledge base from scratch.
+**Layer 2 - the orchestrator.** `main.py` runs all four Layer 1 steps in the correct order, checking after each one that it actually worked before moving on. This is the one file to run to rebuild the knowledge base from scratch.
 
 **Layer 3 - the two raw sources everything else reads from.** The `output/` folder is what `main.py` actually produces - a saved, ready-to-search copy of every narrative document (Layer 1). The master spreadsheet (`data/*.xlsx`) is a separate source entirely, holding the real HCP-level prescribing and propensity data.
  
@@ -42,7 +42,7 @@ In a real deployment, both of these would be built from bought and licensed data
 
 In this project, all of the above is synthetic data generated to look like the real thing, not actual licensed data.
 
-**Layer 4 - the two engines.** `query_spreadsheet.py` is the structured query engine - it answers ranking, counting, and filtering questions by looking directly at the spreadsheet. `search_documents.py` is the document search engine - it finds the most relevant chunks for a narrative question, using whichever embedding model built the store (see `embedding_backend.py` below).
+**Layer 4 - the two engines.** `query_spreadsheet.py` is the structured query engine - it answers ranking, counting, and filtering questions by looking directly at the spreadsheet. `search_documents.py` is the document search engine - it finds the most relevant chunks for a narrative question by combining meaning-based search (via whichever embedding model built the store, see `embedding_backend.py` below) with keyword search (via the BM25 index, see `bm25_index.py` below), fusing the two rankings with Reciprocal Rank Fusion, then re-ordering the top 20 fused candidates with a small cross-encoder reranker (see `reranker_backend.py` below) that reads the query and each candidate chunk together for a final relevance judgement.
 
 **Layer 5 - the two paths that actually ask a question.** This is where the two approaches diverge, both sitting on the exact same Layer 4 engines underneath:
 - **Path A, the regex router:** `ask_a_question.py` reads a question with keyword/regex rules, decides which engine(s) it needs, calls them, and returns the raw answer - no real understanding, just pattern matching.
@@ -85,11 +85,12 @@ Alongside the code, five pages sit at the repo root, matching the five nav tabs 
 | `1_chunk_documents.py` | 1 | Splits source documents into small, labeled, searchable pieces |
 | `2_tag_chunks.py` | 1 | Adds competitor/brand tags to each piece |
 | `3_create_embeddings.py` | 1 | Converts each piece into a vector for meaning-based search |
+| `4_create_bm25_index.py` | 1 | Builds a BM25 keyword index over the same narrative pieces (HCP cards excluded) |
 | `main.py` | 2 | Runs the whole build pipeline, in order, with checks |
 | `output/` folder | 3 | What `main.py` produces - the saved, searchable documents |
 | `data/*.xlsx` (master spreadsheet) | 3 | The real HCP prescribing/propensity data |
 | `query_spreadsheet.py` | 4 | Structured engine - ranking, counting, filtering |
-| `search_documents.py` | 4 | Document engine - meaning-based search over chunks |
+| `search_documents.py` | 4 | Document engine - hybrid (meaning + keyword) search, fused via RRF, then reranked by a cross-encoder |
 | `ask_a_question.py` | 5 (Path A) | Regex router - no AI, keyword matching only |
 | `agent_tools.py` | 5 (Path B) | Bridges the agent's tool calls to the two real engines, incl. `aggregate_hcp_stats` |
 | `ground_truth.py` | 5 (eval) | Shared live-answer computation + verified narrative facts, used by every eval file below |
@@ -110,7 +111,9 @@ Alongside the code, five pages sit at the repo root, matching the five nav tabs 
 | `test_judge_loop.py` | 8 (offshoot, test) | Free, no-API-key tests over `judge_loop.py`'s pure logic (mock judge, exam scoring math, kappa math, a direct check that `--build-gold` never mutates the real search index) and `human_review_ui.py`'s vote-loading rule |
 | `build_dashboard.py` | 9 | Reads `eval_runs/` + the live query/user feedback logs, writes `dashboard.html` |
 | `dashboard.html` | 9 (output) | Generated by `build_dashboard.py` - golden-set trend, live queries, and user feedback ratings in one page |
-| `embedding_backend.py` | standalone | Shared fallback so build and query never use mismatched embedding models |
+| `embedding_backend.py` | standalone | Holds the real MiniLM model plus its offline fallback behind one shared interface, so build and query never use mismatched embedding models |
+| `bm25_index.py` | standalone | Builds/loads the BM25 keyword index alongside the embeddings, behind the same build/query-consistency pattern as `embedding_backend.py` |
+| `reranker_backend.py` | standalone | Wraps the cross-encoder reranker model (`cross-encoder/ms-marco-MiniLM-L-6-v2`), behind the same graceful-fallback pattern as `embedding_backend.py` - if the model can't load, `search_documents.py` falls back to the RRF-fused order instead of failing |
 | `propensity_model.py` | standalone | The scoring formula as code; guards `main.py` against stale scores |
 | `challenger_validation.py` | standalone | Checks the scorecard against real outcomes and a learned model |
 | `intel_digest.py` | standalone | Competitive intelligence loop - feed, triage, digest, ingest |
@@ -205,7 +208,8 @@ CI (`.github/workflows/eval.yml`) runs the full build plus `test_the_system.py` 
 
 ## Current status / known limitations
 
-- **The embedding model sometimes misses the right chunk, or ranks a worse one above it.** Confirmed directly by `test_retrieval_ranking.py` against the real embedding model: 4 of 10 narrative questions didn't rank their correct chunk first, and one didn't retrieve it at all even with a well-formed query. This is a genuine limitation of the embedding model itself (`all-MiniLM-L6-v2`), not a routing or prompting problem - the real fix (hybrid keyword + semantic search) is a larger piece of work, deliberately not undertaken for this showcase.
+- **Hybrid search (BM25 keyword + embedding) plus a cross-encoder reranker have measurably improved retrieval since the original embedding-only baseline.** `test_retrieval_ranking.py` went from 6/10 narrative questions ranking their correct chunk first to 8/10; `test_article_retrieval.py` (real published papers) went from 4/10 to 7/10 on single-source questions, with zero questions now missing their correct chunk entirely (down from 2/10). One question - *why do patients stop taking GLP-1s after a year* - still doesn't retrieve its correct chunk at all even with both keyword search and reranking added, confirming this specific case is a harder retrieval problem than the embedding model alone. See the [Evaluation Suite](https://ax-consult-group.github.io/medical-Rabivy-AI-engine/evals.html#retrieval-ranking-quality) write-up for the full before/after numbers.
+- **The reranker can reduce coverage on multi-document synthesis questions.** A question needing evidence from 3 separate source papers went from finding 2 of the 3 to finding only 1 after the reranker was added - a reranker optimizes for the single chunk that reads as most relevant to the exact question wording, which can work against a question that genuinely needs several *different* documents represented rather than several similar-sounding ones. Flagged as an open investigation, not yet a diagnosed root cause or a fix.
 - Both Path A and Path B sit on the same Layer 4 engines - a change to those engines affects both, so both are kept in sync deliberately, not by accident.
 
 ---

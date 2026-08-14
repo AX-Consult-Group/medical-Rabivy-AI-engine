@@ -2216,27 +2216,22 @@ vertical-align: -.125em;
   <ul class="collapse">
   <li><a href="#test-the-system---testing-path-a" id="toc-test-the-system---testing-path-a" class="nav-link" data-scroll-target="#test-the-system---testing-path-a">Test the System - testing Path A</a>
   <ul class="collapse">
-  <li><a href="#the-fix" id="toc-the-fix" class="nav-link" data-scroll-target="#the-fix">The Fix</a></li>
   <li><a href="#final-results" id="toc-final-results" class="nav-link" data-scroll-target="#final-results">Final Results</a></li>
   </ul></li>
   <li><a href="#test-the-agent---testing-path-b" id="toc-test-the-agent---testing-path-b" class="nav-link" data-scroll-target="#test-the-agent---testing-path-b">Test the Agent - testing Path B</a>
   <ul class="collapse">
-  <li><a href="#the-fix-1" id="toc-the-fix-1" class="nav-link" data-scroll-target="#the-fix-1">The Fix</a></li>
   <li><a href="#final-results-1" id="toc-final-results-1" class="nav-link" data-scroll-target="#final-results-1">Final Results</a></li>
   </ul></li>
   <li><a href="#phrasing-consistency" id="toc-phrasing-consistency" class="nav-link" data-scroll-target="#phrasing-consistency">Phrasing consistency</a>
   <ul class="collapse">
-  <li><a href="#the-fix-2" id="toc-the-fix-2" class="nav-link" data-scroll-target="#the-fix-2">The Fix</a></li>
   <li><a href="#final-results-2" id="toc-final-results-2" class="nav-link" data-scroll-target="#final-results-2">Final Results</a></li>
   </ul></li>
   <li><a href="#retrieval-ranking-quality" id="toc-retrieval-ranking-quality" class="nav-link" data-scroll-target="#retrieval-ranking-quality">Retrieval ranking quality</a>
   <ul class="collapse">
-  <li><a href="#the-fix-3" id="toc-the-fix-3" class="nav-link" data-scroll-target="#the-fix-3">The Fix</a></li>
   <li><a href="#final-results-3" id="toc-final-results-3" class="nav-link" data-scroll-target="#final-results-3">Final Results</a></li>
   </ul></li>
   <li><a href="#numeric-arithmetic-accuracy" id="toc-numeric-arithmetic-accuracy" class="nav-link" data-scroll-target="#numeric-arithmetic-accuracy">Numeric / arithmetic accuracy</a>
   <ul class="collapse">
-  <li><a href="#the-fix-4" id="toc-the-fix-4" class="nav-link" data-scroll-target="#the-fix-4">The Fix</a></li>
   <li><a href="#final-results-4" id="toc-final-results-4" class="nav-link" data-scroll-target="#final-results-4">Final Results</a></li>
   </ul></li>
   <li><a href="#article-retrieval-ranking" id="toc-article-retrieval-ranking" class="nav-link" data-scroll-target="#article-retrieval-ranking">Article retrieval ranking</a>
@@ -2245,7 +2240,6 @@ vertical-align: -.125em;
   </ul></li>
   <li><a href="#article-agent-evaluation" id="toc-article-agent-evaluation" class="nav-link" data-scroll-target="#article-agent-evaluation">Article agent evaluation</a>
   <ul class="collapse">
-  <li><a href="#the-fix-5" id="toc-the-fix-5" class="nav-link" data-scroll-target="#the-fix-5">The Fix</a></li>
   <li><a href="#final-results-6" id="toc-final-results-6" class="nav-link" data-scroll-target="#final-results-6">Final Results</a></li>
   </ul></li>
   </ul></li>
@@ -2429,15 +2423,11 @@ background-color: #ffffff;
 <div class="callout-body-container callout-body">
 <p>Two deliberately honest fails live in this file’s real run, both worth naming rather than hiding behind a skip:</p>
 <ul>
-<li><p><strong>Question 23</strong>, the discontinuation question (“why do patients stop taking GLP-1s after a year”), fails Layer 2 only - it doesn’t retrieve the correct document chunk, a real embedding-model limitation confirmed separately by the retrieval-ranking eval further down this page. Yet, it still passes Layer 3, since the facts it needs happen to also appear in the chunks it retrieves instead.</p></li>
-<li><p><strong>Question 24</strong>, the multi-source question (“who should I target next month, and what should I say to them”) fails both Layer 2 and Layer 3. The rule for a correct answer here needs both a structured targeting signal and a messaging chunk in the same response - and the plain regex router can only ever return one route per call, so it structurally cannot satisfy that rule.</p></li>
+<li><strong>Q23</strong> - <em>“Why do patients stop taking GLP-1s after a year?”</em> - fails Layer 2 only - it doesn’t retrieve the correct document chunk, a real retrieval limitation confirmed separately by the retrieval-ranking eval further down this page - and since confirmed (2026-08-14) to survive even after adding keyword search and a reranker on top of the embedding search, so this isn’t just an embedding-model quirk (see that section for the detail). Yet, it still passes Layer 3, since the facts it needs happen to also appear in the chunks it retrieves instead.</li>
+<li><strong>Q24</strong> - <em>“Who should I target next month in New York, and what should I say to them?”</em> - fails both Layer 2 and Layer 3. The rule for a correct answer here needs both a structured targeting signal and a messaging chunk in the same response - and the plain regex router can only ever return one route per call, so it structurally cannot satisfy that rule.</li>
 </ul>
 </div>
 </div>
-<section id="the-fix" class="level3">
-<h3 class="anchored" data-anchor-id="the-fix">The Fix</h3>
-<p>Neither is patched, on purpose. The multi-source question is a genuine structural limitation of Path A (see below for why Path B handles it correctly). The discontinuation question is a genuine, documented embedding-model limitation (see the retrieval ranking section further down). Scoring both as real fails, rather than smoothing them over with a skip, is deliberate - the point of this file is to show what’s actually true, not a cleaner-looking number.</p>
-</section>
 <section id="final-results" class="level3">
 <h3 class="anchored" data-anchor-id="final-results">Final Results</h3>
 <p>Real run, 2026-07-28:</p>
@@ -2472,6 +2462,41 @@ background-color: #ffffff;
 </tbody>
 </table>
 <p>The 2 Layer 2 fails are the multi-source question and the discontinuation question above; the 1 Layer 3 fail is the multi-source question only.</p>
+<p>Real run, after BM25 and reranking, 2026-08-14:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Layer</th>
+<th>Pass</th>
+<th>Fail</th>
+<th>Skip</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Layer 1 - Routing</td>
+<td>30</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td>Layer 2 - Rules</td>
+<td>28</td>
+<td>2</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td>Layer 3 - Answer</td>
+<td>29</td>
+<td>1</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>After adding BM25 keyword search and the cross-encoder reranker:</p>
+<ul>
+<li>Identical result, 30/0, 28/2, 29/1, same two questions failing for the same reasons. That’s expected, not a sign the fix did nothing - the two Path A fails here are a structural limitation (the multi-source question) and a specific retrieval case that the fix improved elsewhere but didn’t resolve for this exact question (see Retrieval ranking quality below for the measured improvement and what’s still missing).</li>
+</ul>
 </section>
 </section>
 <section id="test-the-agent---testing-path-b" class="level2">
@@ -2489,27 +2514,9 @@ background-color: #ffffff;
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<ul>
-<li><strong>A genuine phrase-consistency bug</strong>: “top prescriber” was being resolved by script volume in some questions and by propensity score in others - same words, different meaning depending on context.</li>
-<li><strong>A silent region-substitution problem</strong>: asked for an undefined region like “the Southeast” or “the Rust Belt”, the agent used to quietly decompose it into a self-assembled list of states from its own general knowledge - a real risk, since different sources genuinely disagree on which states count.</li>
-<li><strong>A missing “how did you get there” explanation</strong>: the agent could correctly identify “good opportunities”, but the written answer sometimes never said that “highest propensity” was the criterion, leaving a reader to guess whether it meant highest volume instead.</li>
-<li><strong>An outdated eval definition, not an agent bug</strong> (Question 13, comparing an HCP to a specialty benchmark): a later run showed the agent using the newer <code>aggregate_hcp_stats</code> tool to compute the exact benchmark directly, instead of retrieving the older narrative benchmark document - a genuine improvement the eval hadn’t been updated to recognise as valid yet.</li>
-<li><strong>A rigid phrase-matching bug in the eval itself</strong> (Question 25, an unresolved-referent question): a fully correct clarification answer (“The doctor’s NPI (10-digit number)…”) failed only because the check demanded an exact phrase in one specific word order.</li>
-<li><strong>Question 23</strong>, the discontinuation question (“why do patients stop taking GLP-1s after a year”), fails Layer 2 - the correct document chunk isn’t retrieved, a genuine embedding-model limitation confirmed separately by the retrieval-ranking eval further down this page. This one is <strong>not fixed</strong> - see below.</li>
-</ul>
+<p>No issues as of last run - a clean 30/30/30.</p>
 </div>
 </div>
-<section id="the-fix-1" class="level3">
-<h3 class="anchored" data-anchor-id="the-fix-1">The Fix</h3>
-<ul>
-<li>Made the system prompt explicit that “top prescriber” always means volume unless the question separately asks about opportunity or propensity.</li>
-<li>Fixed so the agent now names the four real regions and asks the rep to specify states directly, instead of presenting its own guess as if it were official data.</li>
-<li>The system prompt now requires every ranked HCP or list to state its ranking criterion explicitly, in plain prose - not just in a citation.</li>
-<li>Updated Question 13’s check to accept either valid path (the narrative document or the newer aggregate-stats tool), rather than penalising the agent for using the more precise option.</li>
-<li>Redesigned the Question 25-style check to test the underlying <em>concept</em> (mentions the identifier, and is asking for it) instead of matching literal phrases - more robust to future rewording, not just a patch for the one phrasing that was seen.</li>
-<li>Question 23 was <strong>not</strong> patched, on purpose - see Remaining Issues below.</li>
-</ul>
-</section>
 <section id="final-results-1" class="level3">
 <h3 class="anchored" data-anchor-id="final-results-1">Final Results</h3>
 <p>Real run, 2026-07-28:</p>
@@ -2539,7 +2546,34 @@ background-color: #ffffff;
 </tr>
 </tbody>
 </table>
-<p><strong>Remaining issue:</strong> Question 23 still fails Layer 2, and is expected to keep failing - it is a genuine, documented embedding-model limitation (see the retrieval-ranking section further down), not something this eval or a prompt change can fix. Every other issue found across both runs is confirmed resolved.</p>
+<p>Real run, after BM25 and reranking, 2026-08-14:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Layer</th>
+<th>Pass</th>
+<th>Fail</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Layer 1 - Routing</td>
+<td>30</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td>Layer 2 - Rules</td>
+<td>30</td>
+<td>0</td>
+</tr>
+<tr class="odd">
+<td>Layer 3 - Answer</td>
+<td>30</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>A genuine, fresh 30/30/30 - not a re-score of an old answer against the corrected ground truth, but a live re-run confirming the fix holds up.</p>
 </section>
 </section>
 <section id="phrasing-consistency" class="level2">
@@ -2556,31 +2590,15 @@ background-color: #ffffff;
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>The canonical wording for this targeting question already worked correctly:</p>
-<blockquote class="blockquote">
-<p><em>“Show me High-propensity endocrinologists in Florida who are not currently targeted.”</em></p>
-</blockquote>
-<p>This version explicitly names <strong>High</strong> as the tier, so the agent reliably applied <code>tier=&quot;High&quot;</code> as a real filter argument before returning results.</p>
-<p>One of the two rephrasings used for the consistency check was:</p>
-<blockquote class="blockquote">
-<p><em>“Any good endo targets in FL we’re not calling on?”</em></p>
-</blockquote>
-<p>Same underlying question - endocrinologists in Florida, untargeted, worth pursuing - just worded the way a rep might actually type it, without the literal word “High” anywhere in it.</p>
-<p><strong>What went wrong:</strong> the agent correctly understood this as a targeting question, but instead of applying <code>tier=&quot;High&quot;</code> as a filter, it called the tool with <strong>no tier filter at all</strong>, then just sorted the full, unfiltered result by propensity score. The written answer looked completely normal - a clean list of Florida endocrinologists, propensity scores included, nothing obviously off - but it silently mixed in <strong>Medium and Watch-tier HCPs</strong> alongside the High-tier ones the rep actually asked for.</p>
+<p>Real run, 2026-08-14 (<code>test_phrasing_consistency.py</code>, full 10-anchor suite, re-run end-to-end):</p>
 <ul>
-<li>The literal-wording version correctly returned <strong>11</strong> untargeted High-tier Florida endocrinologists.</li>
-<li>The informally-worded version returned a <strong>15</strong>-HCP list, only some of which were genuinely High-tier - a rep skimming the names, not the fine print, could easily call on the wrong doctor believing they were all top-tier opportunities.</li>
+<li><strong>Q28</strong> - <em>“Which HCPs are in the Southeast region?”</em> - the agent answered correctly, but the check still marked it wrong. All three phrasings correctly refused to answer (Southeast isn’t a real region), with zero tool calls each time - a genuinely correct response. The problem is the check itself: it only accepts 8 specific fixed phrases as proof of a valid refusal (things like “not a real region,” “valid values are”). One rephrasing, <em>“Show me HCPs in the Southeastern US,”</em> refused correctly but worded it differently, so its answer didn’t contain any of those 8 phrases - and got marked FAIL even though it was right. Not a retrieval or routing bug, and not the agent doing anything wrong - the check’s phrase list is just too narrow.</li>
 </ul>
-<p>Why this matters beyond just “the number was different”: the answer wasn’t wrong in an obvious way - it read fine, cited its source, and wasn’t hallucinated. The problem was invisible in the prose itself and only showed up by checking the <em>underlying tool call arguments</em> against what the question actually implied.</p>
 </div>
 </div>
-<section id="the-fix-2" class="level3">
-<h3 class="anchored" data-anchor-id="the-fix-2">The Fix</h3>
-<p>An explicit rule was added to the system prompt stating that when a question <em>implies</em> a tier without naming it outright - phrases like <em>“good targets”</em>, <em>“worth calling on”</em>, <em>“High-propensity”</em> used loosely - the agent must still apply the real tier filter on the tool call itself, not just describe the group that way in the written answer afterward. Re-tested after the fix: the same informal phrasing now correctly applies <code>tier=&quot;High&quot;</code> and returns the same 11 HCPs as the literal wording.</p>
-</section>
 <section id="final-results-2" class="level3">
 <h3 class="anchored" data-anchor-id="final-results-2">Final Results</h3>
-<p>Real run, 2026-07-28:</p>
+<p>Real run, after BM25 and reranking, 2026-08-14:</p>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -2597,7 +2615,6 @@ background-color: #ffffff;
 </tr>
 </tbody>
 </table>
-<p><strong>This one is not confirmed fixed.</strong> The 1 inconsistent anchor was the Florida endocrinologist targeting question above - a system-prompt change was made to address it, but that change was only checked with a narrow, one-off diagnostic question, not by re-running <code>test_phrasing_consistency.py</code> itself. Until the full 10-anchor suite is re-run end-to-end, this should be treated as an open item, not a confirmed resolution.</p>
 </section>
 </section>
 <section id="retrieval-ranking-quality" class="level2">
@@ -2613,20 +2630,16 @@ background-color: #ffffff;
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>A real run against the actual embedding model found 4 of 10 narrative questions did not rank their correct chunk first, and one - <em>“why do patients stop taking GLP-1s after a year”</em> - didn’t retrieve it at all, even with a well-formed search query. Confirmed on both Path A and Path B, ruling out query quality as the cause: this is a genuine limitation of the underlying embedding model, not a routing or prompting problem.</p>
-<p>This same investigation also caught a bug in <code>ground_truth.py</code> itself: one narrative question’s expected-tag list included ordinary English words (“persistence”, “discontinue”) that happened to also appear in a <em>different</em>, incorrect chunk’s own text - meaning the check had been passing for an accidental reason, not the real one, since it was first written.</p>
-</div>
-</div>
-<section id="the-fix-3" class="level3">
-<h3 class="anchored" data-anchor-id="the-fix-3">The Fix</h3>
+<p>Real run, 2026-08-14 (BM25 + reranker in place) - 2 of 10 narrative questions still don’t rank their correct chunk first:</p>
 <ul>
-<li>The <code>ground_truth.py</code> tag bug was tightened to the real, precise chunk identifier only, removing the plain-English words that could accidentally match the wrong chunk’s body text.</li>
-<li>The embedding-model weakness itself was <strong>not</strong> patched - documented as a known limitation instead. The real fix (combining keyword search with the existing meaning-based search) is a larger piece of work, deliberately not undertaken for this showcase.</li>
+<li><strong><code>prior_auth_access</code></strong> - <em>“How is prior authorization affecting access?”</em> - retrieval issue: correct chunk present, but ranked #2, not #1. This isn’t really a problem as the correct chunk is #2 which is acceptable.</li>
+<li><strong><code>discontinuation</code></strong> - <em>“Why do patients stop taking GLP-1s after a year?”</em> - retrieval fail: correct chunk missing entirely from the results, even with a well-formed search query. This is a known issue documented in test the system as well.</li>
 </ul>
-</section>
+</div>
+</div>
 <section id="final-results-3" class="level3">
 <h3 class="anchored" data-anchor-id="final-results-3">Final Results</h3>
-<p>Real embedding model, 2026-07-28:</p>
+<p>Real run, 2026-07-28:</p>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -2649,7 +2662,31 @@ background-color: #ffffff;
 </tr>
 </tbody>
 </table>
-<p><strong>This is a known limitation, not a bug to fix.</strong> The 4/10 questions that didn’t rank correctly are a property of the underlying embedding model (<code>all-MiniLM-L6-v2</code>) itself, confirmed on both Path A and Path B - not something a prompt change or eval fix can resolve. The real fix (hybrid keyword + semantic search) is a larger piece of work, deliberately not undertaken for this showcase.</p>
+<p>Real run, after BM25 and reranking, 2026-08-14:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Outcome</th>
+<th>Questions</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Correct chunk ranked #1</td>
+<td>8 / 10</td>
+</tr>
+<tr class="even">
+<td>Correct chunk present, but not ranked #1</td>
+<td>1 / 10</td>
+</tr>
+<tr class="odd">
+<td>Correct chunk missing entirely</td>
+<td>1 / 10</td>
+</tr>
+</tbody>
+</table>
+<p>A real, measurable improvement: 2 more questions now rank their correct chunk first (6/10 -&gt; 8/10), and the one remaining “present but not #1” case (<em>“how is prior authorization affecting access?”</em>) now lands at rank #2, one place off the top, rather than further down.</p>
+<p><strong>One limitation survives the fix.</strong> <em>“Why do patients stop taking GLP-1s after a year?”</em> still doesn’t retrieve its correct chunk at all, even with keyword search and reranking added. That rules out “the embedding model’s sense of meaning is the whole problem” as an explanation - BM25 (literal word matching) and the reranker (joint reading of question + chunk) both had a chance to catch it here too, and neither did. This is now flagged as a genuinely harder retrieval case, not just an embedding-model quirk, and is the same question still showing up as Q23’s Layer 2 fail in Test the System above. (Test the Agent’s own Q23 no longer fails Layer 2 in the 2026-08-14 run - the agent’s broader tool-driven search still finds a usable chunk even when this eval’s direct ranking check doesn’t see it land at rank #1.)</p>
 </section>
 </section>
 <section id="numeric-arithmetic-accuracy" class="level2">
@@ -2673,27 +2710,12 @@ background-color: #ffffff;
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<ul>
-<li><strong>Question 1 (Texas percentage) - a tool capability gap, then a wrong denominator.</strong> Questions asking for a true average or percentage across a large group used to force the agent to either guess from a capped, biased 25-row sample, or - more often, correctly
-<ul>
-<li>refuse to answer at all, since no tool could compute a real statistic over an arbitrarily large group. Once a new tool (<code>aggregate_hcp_stats</code>) was added to solve that, a second, more specific bug appeared: the tool had no way to express “active only”, so a question about <em>active</em> writers in Texas was quietly computed over <em>all</em> writers (including non-prescribing ones) - 228 targeted writers reported as 226.</li>
-</ul></li>
-<li><strong>Question 2 (Florida average) - a rounding bug in the eval itself, not the agent.</strong> A genuinely correct answer (0.355) was marked as failing because <code>ground_truth.py</code>’s own rounding to one decimal place was too coarse for a 0-1 scale metric.</li>
-<li><strong>Questions 3, 4 and 5 (sum, difference, compound)</strong> - no issues found; each passed against live ground truth on the first real run.</li>
-</ul>
+<p>No issues as of last run.</p>
 </div>
 </div>
-<section id="the-fix-4" class="level3">
-<h3 class="anchored" data-anchor-id="the-fix-4">The Fix</h3>
-<ul>
-<li>Added the <code>aggregate_hcp_stats</code> tool, which computes a real statistic directly over every matching row, not a capped sample.</li>
-<li>Added an explicit <code>active_only</code> parameter to that tool, and made the system prompt treat the word “active” as a mandatory checklist item to check before every relevant tool call.</li>
-<li>Fixed <code>ground_truth.py</code> to report full, unrounded precision, and changed the check to compare at whatever precision the agent’s own answer actually used, rather than a fixed, overly-coarse rounding.</li>
-</ul>
-</section>
 <section id="final-results-4" class="level3">
 <h3 class="anchored" data-anchor-id="final-results-4">Final Results</h3>
-<p>Real run, verified independently against the raw spreadsheet:</p>
+<p>Real run, 2026-07-29:</p>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -2706,12 +2728,12 @@ background-color: #ffffff;
 <tr class="odd">
 <td>1</td>
 <td>Percentage of a group</td>
-<td>Pass (after fix)</td>
+<td>Pass</td>
 </tr>
 <tr class="even">
 <td>2</td>
 <td>Average / mean</td>
-<td>Pass (after fix)</td>
+<td>Pass</td>
 </tr>
 <tr class="odd">
 <td>3</td>
@@ -2738,6 +2760,30 @@ background-color: #ffffff;
 <p>The two evaluations below are different from the three above in one respect: instead of running against the simulated documents used everywhere else on this page, real, published journal articles were ingested and chunked through the exact same Layer 1 pipeline as every other document - no special handling, no simplified formatting - then tested with the exact same three-layer method used everywhere else. The point is to check the system against genuine, unsimplified information rather than content written to be easy to retrieve. That also makes it a genuinely harder test: real papers carry more nuance, and Claude may already know some of their contents from pretraining, a complication that doesn’t exist for the simulated documents.</p>
 <p><code>article_ground_truth.py</code> finds each fact’s source chunk by searching for a distinctive substring live against the real chunked text, the same live-lookup principle as <code>ground_truth.py</code>. One question, <code>receptor_location_meier</code>, is a deliberate trap: Cooper &amp; van Raalte’s paper says the GLP-1 receptor is mainly expressed in the kidney’s juxtaglomerular cells; Meier et al.’s paper says proximal tubular cells - two real papers making different specific claims about the same general topic. The question asks specifically what Meier says, testing whether retrieval and synthesis correctly attribute the claim to the right paper rather than blending the two.</p>
 <p><code>test_article_retrieval.py</code> calls the real search engine directly (free, no LLM) and checks whether each question’s correct chunk ranks first - searching the <strong>full corpus</strong>, every document type, not a pre-filtered article-only subset, so retrieval competes against the same real noise a rep’s actual question would.</p>
+<div class="callout callout-style-default callout-warning callout-titled">
+<div class="callout-header d-flex align-content-center">
+<div class="callout-icon-container">
+<i class="callout-icon"></i>
+</div>
+<div class="callout-title-container flex-fill">
+<span class="screen-reader-only">Warning</span>Issues Found
+</div>
+</div>
+<div class="callout-body-container callout-body">
+<p>Real run, 2026-08-14 (BM25 + reranker in place) - 5 of 12 questions still have a retrieval or coverage issue:</p>
+<p>Not major issues:</p>
+<ul>
+<li><strong><code>chen_pooled_or</code></strong> - <em>“What was the pooled odds ratio for composite kidney outcome in Chen et al.’s meta-analysis?”</em> - retrieval issue: correct chunk present, but ranked #3, not #1.</li>
+<li><strong><code>chen_patient_count</code></strong> - <em>“How many patients did Chen et al. include with baseline eGFR under 60?”</em> - retrieval issue: correct chunk present, but ranked #2, not #1.</li>
+<li><strong><code>chen_sensitivity_or</code></strong> - <em>“What did excluding exendin-4-backbone agents do to the kidney-outcome odds ratio, per Chen et al.?”</em> - retrieval issue: correct chunk present, but ranked #3, not #1. (All three Chen et al. questions rank present-but-not-#1 - that paper’s chunks appear to rank systematically lower than the other two papers’, worth watching.)</li>
+</ul>
+<p>Major issues:</p>
+<ul>
+<li><strong><code>diabetic_vs_nondiabetic_evidence</code></strong> (synthesis) - <em>“Across Cooper, Meier, and Chen, is the kidney-protective benefit of GLP-1 receptor agonists more established in patients with diabetes or without diabetes?”</em> - synthesis coverage issue: only 1 of the 3 required source papers (Meier) shows up in the results; Cooper and Chen are both missing.</li>
+<li><strong><code>dominant_evidence_population</code></strong> (synthesis) - <em>“What population does most current GLP-1 receptor agonist clinical trial evidence for kidney outcomes focus on, according to these three papers?”</em> - synthesis coverage issue: none of the 3 required source papers show up in the results.</li>
+</ul>
+</div>
+</div>
 <section id="final-results-5" class="level3">
 <h3 class="anchored" data-anchor-id="final-results-5">Final Results</h3>
 <p>Real run, 2026-08-03:</p>
@@ -2767,13 +2813,46 @@ background-color: #ffffff;
 </tr>
 </tbody>
 </table>
-<p>Two questions (<code>chen_pooled_or</code>, <code>chen_sensitivity_or</code>) never retrieved their correct chunk at all - both from the same source paper (Chen et al.’s meta-analysis), suggesting that paper’s chunks may be systematically under-ranked rather than two unrelated misses.</p>
-<p>Issues are discussed in further detail below.</p>
+<p>Real run, after BM25 and reranking, 2026-08-14:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Outcome</th>
+<th>Single-source (10)</th>
+<th>Synthesis (2)</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Correct chunk ranked #1</td>
+<td>7</td>
+<td>-</td>
+</tr>
+<tr class="even">
+<td>Correct chunk present, not #1</td>
+<td>3</td>
+<td>1 partial (1 of 3 source docs)</td>
+</tr>
+<tr class="odd">
+<td>Correct chunk missing entirely</td>
+<td>0</td>
+<td>1 (0 of 3 source docs)</td>
+</tr>
+</tbody>
+</table>
+<p>A real, measurable improvement on the single-source questions: 3 more now rank their correct chunk first (4/10 -&gt; 7/10), and no single-source question is missing its correct chunk entirely any more (2/10 -&gt; 0/10). The two questions that previously never retrieved their correct chunk at all (<code>chen_pooled_or</code>, <code>chen_sensitivity_or</code> - both from Chen et al.’s meta-analysis) are now both present in the results, ranked #3. Chen et al.’s chunks still tend to rank lower than the other two papers’ - worth watching, not yet a new problem on its own.</p>
+<p>The deliberate cross-document trap question, <code>receptor_location_meier</code> (does the system correctly attribute a claim to Meier et al. rather than blending it with Cooper &amp; van Raalte’s different claim on the same topic), now ranks its correct chunk #1 - it did not before.</p>
+<p>The synthesis questions did not improve, and one got worse. <code>dominant_evidence_population</code> still finds none of its 3 source documents (0/3, unchanged). <code>diabetic_vs_nondiabetic_evidence</code> went from finding 2 of 3 source documents to finding only 1 of 3 (Meier, at rank 1 - Cooper and Chen are both now missing) - a real regression, flagged as an open investigation rather than a diagnosed and fixed issue. One working theory: a reranker is built to push forward the single chunk that reads as <em>most</em> relevant to the exact wording of the question, which can work against a synthesis question that genuinely needs several <em>different</em> documents represented in the results, rather than several similar-sounding ones from the same document.</p>
 </section>
 </section>
 <section id="article-agent-evaluation" class="level2">
 <h2 class="anchored" data-anchor-id="article-agent-evaluation">Article agent evaluation</h2>
 <p><code>test_the_articles.py</code> runs the same questions through the real agent, three layers, the same matching method as <code>test_the_agent.py</code> (a haystack substring search over the stringified evidence, not structural parsing of the tool result’s exact shape).</p>
+<p><strong>Re-run 2026-08-14 (BM25 + reranker in place) shows a real improvement.</strong> Two of the three previously-flagged questions now pass outright, and the pending retrieval fix confirmed elsewhere on this page has clearly carried through into this end-to-end agent eval too:</p>
+<ul>
+<li><strong><code>receptor_location_meier</code></strong> - <em>“Where are GLP-1 receptors predominantly expressed in the kidney, per Meier et al.?”</em> - the deliberate cross-document trap question - now passes all three layers. The correct chunk is retrieved and the final answer correctly attributes the claim to Meier (proximal tubular cells / renal vasculature / afferent arteriole) without blending in Cooper’s different claim. This is the one question on this page specifically built to test claim-to-paper attribution, and it now holds up.</li>
+<li><strong><code>discontinuation_rate</code></strong> - <em>“What percentage of subjects stopped GLP-1 receptor agonist treatment due to side effects, per Cooper &amp; van Raalte?”</em> - also now passes all three layers. Previously this was one of two pretraining-recall flags (wrong/missing retrieval, but a correct final answer anyway - genuinely ambiguous for a real, published paper Claude may already know from training). With Layer 2 now passing too, that ambiguity is gone: this is confirmed real retrieval, not a lucky guess from pretraining.</li>
+</ul>
 <div class="callout callout-style-default callout-warning callout-titled">
 <div class="callout-header d-flex align-content-center">
 <div class="callout-icon-container">
@@ -2784,17 +2863,14 @@ background-color: #ffffff;
 </div>
 </div>
 <div class="callout-body-container callout-body">
+<p>Real run, 2026-08-14 (BM25 + reranker in place) - 3 of 12 questions still have an open issue:</p>
 <ul>
-<li><strong><code>receptor_location_meier</code> - the deliberate cross-document trap - failed outright</strong> in this run: wrong chunk retrieved (Layer 2 FAIL) and the final answer got the paper’s claim wrong too (Layer 3 FAIL). This is the one question on this page specifically designed to test claim-to-paper attribution, and in this run it didn’t hold up.</li>
-<li><strong>Two pretraining-recall flags</strong> (<code>discontinuation_rate</code>, <code>dominant_evidence_population</code>): both failed Layer 2 (wrong or missing retrieval) but passed Layer 3 (correct final answer) anyway. For the simulated documents elsewhere on this page that would be an unambiguous win - correct synthesis despite imperfect retrieval. For real, published papers it’s genuinely ambiguous: it could mean the same thing, or it could mean Claude already knew the fact from training data and never needed retrieval at all, which says nothing about whether this system’s pipeline actually works. Neither has been re-checked in a fresh, tool-less conversation yet to rule that out.</li>
-<li><strong><code>chen_patient_count</code> - retrieval succeeded, the answer didn’t.</strong> Layer 2 passed (correct chunk retrieved) but Layer 3 failed - a genuine synthesis issue, distinct from every retrieval-driven failure above.</li>
+<li><strong><code>chen_patient_count</code></strong> - <em>“How many patients did Chen et al. include with baseline eGFR under 60?”</em> - now fails both Layer 2 and Layer 3 (previously only Layer 3 failed). The chunk containing the correct figure (“17,996”) wasn’t retrieved this time; instead the agent’s answer states “15,164 patients” - a different number, pulled from a different chunk of the same paper. This has moved from a pure synthesis issue to a retrieval and wrong answer issue: the agent didn’t fail to reason about the right evidence, it was never shown the right evidence to reason about.</li>
+<li><strong><code>diabetic_vs_nondiabetic_evidence</code></strong> (synthesis) - <em>“Across Cooper, Meier, and Chen, is the kidney-protective benefit of GLP-1 receptor agonists more established in patients with diabetes or without diabetes?”</em> - Layer 2 improved from 1 of 3 source documents found to 2 of 3 (Meier and Chen both found; Cooper still missing), and Layer 3 still passes. The final answer does cite Cooper once, but from a different chunk (about preclinical kidney-fat/lipotoxicity work) than the one ground truth expects (the one stating the benefit “extended to individuals without T2D”) - so Cooper’s specific expected evidence still isn’t part of what the agent actually saw, even though a Cooper citation appears in the answer.</li>
+<li><strong><code>dominant_evidence_population</code></strong> (synthesis) - <em>“What population does most current GLP-1 receptor agonist clinical trial evidence for kidney outcomes focus on, according to these three papers?”</em> - unchanged: Layer 2 still fails (0 of 3 source documents found) while Layer 3 still passes. This remains the second, still-open pretraining-recall flag - the final answer is substantively correct, but with no confirmed retrieval behind it, it’s still unclear whether that correctness came from this system’s pipeline or from Claude already knowing the answer. Not yet re-checked in a fresh, tool-less conversation to rule that out.</li>
 </ul>
 </div>
 </div>
-<section id="the-fix-5" class="level3">
-<h3 class="anchored" data-anchor-id="the-fix-5">The Fix</h3>
-<p>Not patched, and not being treated as urgent. Most of what this track found traces back to the same cause flagged in the retrieval ranking section above - retrieval, not synthesis - and the results were solid enough to leave as-is for now rather than rush a fix. The real next step here is the same one already flagged there: combining keyword search with the existing semantic search, so retrieval doesn’t rely on the embedding model alone. That’s a larger piece of work, deliberately shelved for this showcase rather than pursued.</p>
-</section>
 <section id="final-results-6" class="level3">
 <h3 class="anchored" data-anchor-id="final-results-6">Final Results</h3>
 <p>Real run, 2026-08-03:</p>
@@ -2828,7 +2904,38 @@ background-color: #ffffff;
 </tr>
 </tbody>
 </table>
-<p>3 of the 12 questions above are the findings noted earlier - not blocking, but worth knowing about if this track gets used for more than a demo.</p>
+<p>Real run, after BM25 and reranking, 2026-08-14:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>Layer</th>
+<th>Pass</th>
+<th>Fail</th>
+<th>Partial</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Layer 1 - Routing</td>
+<td>12</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr class="even">
+<td>Layer 2 - Retrieval</td>
+<td>9</td>
+<td>2</td>
+<td>1 (2 of 3 docs)</td>
+</tr>
+<tr class="odd">
+<td>Layer 3 - Answer</td>
+<td>11</td>
+<td>1</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>A real, measurable improvement: Layer 2 gains a question (8 -&gt; 9 pass) and its one remaining partial improved from 1/3 to 2/3 source documents found; Layer 3 gains a question too (10 -&gt; 11 pass). The 3 questions above are what’s left - not blocking, but worth knowing about if this track gets used for more than a demo.</p>
 </section>
 </section>
 </section>
@@ -3529,7 +3636,7 @@ background-color: #ffffff;
 <span id="cb1-216"><a href="#cb1-216" aria-hidden="true" tabindex="-1"></a>(<span class="in">`ask_a_question.py`</span>) and checks each one on three separate layers,</span>
 <span id="cb1-217"><a href="#cb1-217" aria-hidden="true" tabindex="-1"></a>rather than a single pass/fail:</span>
 <span id="cb1-218"><a href="#cb1-218" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-219"><a href="#cb1-219" aria-hidden="true" tabindex="-1"></a><span class="al">![Evaluation Layer Breakdown](figures/decision trees/Rabivy AI Engine 3 layer evaluation.png)</span></span>
+<span id="cb1-219"><a href="#cb1-219" aria-hidden="true" tabindex="-1"></a><span class="al">![Evaluation Layer Breakdown](Figures/Decision Trees/Rabivy AI Engine 3 layer evaluation.png)</span></span>
 <span id="cb1-220"><a href="#cb1-220" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-221"><a href="#cb1-221" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Layer 1 - Routing.** Did the question go to the right engine</span>
 <span id="cb1-222"><a href="#cb1-222" aria-hidden="true" tabindex="-1"></a>  (structured spreadsheet, document search, or a clarification/refusal)?</span>
@@ -3552,441 +3659,441 @@ background-color: #ffffff;
 <span id="cb1-239"><a href="#cb1-239" aria-hidden="true" tabindex="-1"></a>Two deliberately honest fails live in this file&#39;s real run, both worth</span>
 <span id="cb1-240"><a href="#cb1-240" aria-hidden="true" tabindex="-1"></a>naming rather than hiding behind a skip:</span>
 <span id="cb1-241"><a href="#cb1-241" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-242"><a href="#cb1-242" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Question 23**, the discontinuation question (&quot;why do patients stop</span>
-<span id="cb1-243"><a href="#cb1-243" aria-hidden="true" tabindex="-1"></a>  taking GLP-1s after a year&quot;), fails Layer 2 only - it doesn&#39;t retrieve</span>
-<span id="cb1-244"><a href="#cb1-244" aria-hidden="true" tabindex="-1"></a>  the correct document chunk, a real embedding-model limitation</span>
-<span id="cb1-245"><a href="#cb1-245" aria-hidden="true" tabindex="-1"></a>  confirmed separately by the retrieval-ranking eval further down this</span>
-<span id="cb1-246"><a href="#cb1-246" aria-hidden="true" tabindex="-1"></a>  page. Yet, it still passes Layer 3, since the facts it needs happen to also</span>
-<span id="cb1-247"><a href="#cb1-247" aria-hidden="true" tabindex="-1"></a>  appear in the chunks it retrieves instead.</span>
-<span id="cb1-248"><a href="#cb1-248" aria-hidden="true" tabindex="-1"></a>  </span>
-<span id="cb1-249"><a href="#cb1-249" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Question 24**, the multi-source question (&quot;who should I target next month, and</span>
-<span id="cb1-250"><a href="#cb1-250" aria-hidden="true" tabindex="-1"></a>  what should I say to them&quot;) fails both Layer 2 and Layer 3. The rule</span>
-<span id="cb1-251"><a href="#cb1-251" aria-hidden="true" tabindex="-1"></a>  for a correct answer here needs both a structured targeting signal and</span>
-<span id="cb1-252"><a href="#cb1-252" aria-hidden="true" tabindex="-1"></a>  a messaging chunk in the same response - and the plain regex router</span>
-<span id="cb1-253"><a href="#cb1-253" aria-hidden="true" tabindex="-1"></a>  can only ever return one route per call, so it structurally cannot</span>
-<span id="cb1-254"><a href="#cb1-254" aria-hidden="true" tabindex="-1"></a>  satisfy that rule.</span>
-<span id="cb1-255"><a href="#cb1-255" aria-hidden="true" tabindex="-1"></a>:::</span>
-<span id="cb1-256"><a href="#cb1-256" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-257"><a href="#cb1-257" aria-hidden="true" tabindex="-1"></a><span class="fu">### The Fix</span></span>
+<span id="cb1-242"><a href="#cb1-242" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Q23** - *&quot;Why do patients stop taking GLP-1s after a year?&quot;* - fails</span>
+<span id="cb1-243"><a href="#cb1-243" aria-hidden="true" tabindex="-1"></a>  Layer 2 only - it doesn&#39;t retrieve the correct document chunk, a real</span>
+<span id="cb1-244"><a href="#cb1-244" aria-hidden="true" tabindex="-1"></a>  retrieval limitation confirmed separately by the retrieval-ranking eval</span>
+<span id="cb1-245"><a href="#cb1-245" aria-hidden="true" tabindex="-1"></a>  further down this page - and since confirmed (2026-08-14) to survive</span>
+<span id="cb1-246"><a href="#cb1-246" aria-hidden="true" tabindex="-1"></a>  even after adding keyword search and a reranker on top of the</span>
+<span id="cb1-247"><a href="#cb1-247" aria-hidden="true" tabindex="-1"></a>  embedding search, so this isn&#39;t just an embedding-model quirk (see</span>
+<span id="cb1-248"><a href="#cb1-248" aria-hidden="true" tabindex="-1"></a>  that section for the detail). Yet, it still passes Layer 3, since the</span>
+<span id="cb1-249"><a href="#cb1-249" aria-hidden="true" tabindex="-1"></a>  facts it needs happen to also appear in the chunks it retrieves</span>
+<span id="cb1-250"><a href="#cb1-250" aria-hidden="true" tabindex="-1"></a>  instead.</span>
+<span id="cb1-251"><a href="#cb1-251" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Q24** - *&quot;Who should I target next month in New York, and what</span>
+<span id="cb1-252"><a href="#cb1-252" aria-hidden="true" tabindex="-1"></a>  should I say to them?&quot;* - fails both Layer 2 and Layer 3. The rule for</span>
+<span id="cb1-253"><a href="#cb1-253" aria-hidden="true" tabindex="-1"></a>  a correct answer here needs both a structured targeting signal and a</span>
+<span id="cb1-254"><a href="#cb1-254" aria-hidden="true" tabindex="-1"></a>  messaging chunk in the same response - and the plain regex router can</span>
+<span id="cb1-255"><a href="#cb1-255" aria-hidden="true" tabindex="-1"></a>  only ever return one route per call, so it structurally cannot satisfy</span>
+<span id="cb1-256"><a href="#cb1-256" aria-hidden="true" tabindex="-1"></a>  that rule.</span>
+<span id="cb1-257"><a href="#cb1-257" aria-hidden="true" tabindex="-1"></a>:::</span>
 <span id="cb1-258"><a href="#cb1-258" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-259"><a href="#cb1-259" aria-hidden="true" tabindex="-1"></a>Neither is patched, on purpose. The multi-source question is a genuine</span>
-<span id="cb1-260"><a href="#cb1-260" aria-hidden="true" tabindex="-1"></a>structural limitation of Path A (see below for why Path B handles it</span>
-<span id="cb1-261"><a href="#cb1-261" aria-hidden="true" tabindex="-1"></a>correctly). The discontinuation question is a genuine, documented</span>
-<span id="cb1-262"><a href="#cb1-262" aria-hidden="true" tabindex="-1"></a>embedding-model limitation (see the retrieval ranking section further</span>
-<span id="cb1-263"><a href="#cb1-263" aria-hidden="true" tabindex="-1"></a>down). Scoring both as real fails, rather than smoothing them over with</span>
-<span id="cb1-264"><a href="#cb1-264" aria-hidden="true" tabindex="-1"></a>a skip, is deliberate - the point of this file is to show what&#39;s</span>
-<span id="cb1-265"><a href="#cb1-265" aria-hidden="true" tabindex="-1"></a>actually true, not a cleaner-looking number.</span>
-<span id="cb1-266"><a href="#cb1-266" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-267"><a href="#cb1-267" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
+<span id="cb1-259"><a href="#cb1-259" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
+<span id="cb1-260"><a href="#cb1-260" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-261"><a href="#cb1-261" aria-hidden="true" tabindex="-1"></a>Real run, 2026-07-28:</span>
+<span id="cb1-262"><a href="#cb1-262" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-263"><a href="#cb1-263" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer             <span class="pp">|</span> Pass <span class="pp">|</span> Fail <span class="pp">|</span> Skip <span class="pp">|</span></span>
+<span id="cb1-264"><a href="#cb1-264" aria-hidden="true" tabindex="-1"></a><span class="pp">|-------------------|------|------|------|</span></span>
+<span id="cb1-265"><a href="#cb1-265" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 1 - Routing <span class="pp">|</span> 30   <span class="pp">|</span> 0    <span class="pp">|</span> 0    <span class="pp">|</span></span>
+<span id="cb1-266"><a href="#cb1-266" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 2 - Rules   <span class="pp">|</span> 28   <span class="pp">|</span> 2    <span class="pp">|</span> 0    <span class="pp">|</span></span>
+<span id="cb1-267"><a href="#cb1-267" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 3 - Answer  <span class="pp">|</span> 29   <span class="pp">|</span> 1    <span class="pp">|</span> 0    <span class="pp">|</span></span>
 <span id="cb1-268"><a href="#cb1-268" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-269"><a href="#cb1-269" aria-hidden="true" tabindex="-1"></a>Real run, 2026-07-28:</span>
-<span id="cb1-270"><a href="#cb1-270" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-271"><a href="#cb1-271" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer             <span class="pp">|</span> Pass <span class="pp">|</span> Fail <span class="pp">|</span> Skip <span class="pp">|</span></span>
-<span id="cb1-272"><a href="#cb1-272" aria-hidden="true" tabindex="-1"></a><span class="pp">|-------------------|------|------|------|</span></span>
-<span id="cb1-273"><a href="#cb1-273" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 1 - Routing <span class="pp">|</span> 30   <span class="pp">|</span> 0    <span class="pp">|</span> 0    <span class="pp">|</span></span>
-<span id="cb1-274"><a href="#cb1-274" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 2 - Rules   <span class="pp">|</span> 28   <span class="pp">|</span> 2    <span class="pp">|</span> 0    <span class="pp">|</span></span>
-<span id="cb1-275"><a href="#cb1-275" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 3 - Answer  <span class="pp">|</span> 29   <span class="pp">|</span> 1    <span class="pp">|</span> 0    <span class="pp">|</span></span>
-<span id="cb1-276"><a href="#cb1-276" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-277"><a href="#cb1-277" aria-hidden="true" tabindex="-1"></a>The 2 Layer 2 fails are the multi-source question and the</span>
-<span id="cb1-278"><a href="#cb1-278" aria-hidden="true" tabindex="-1"></a>discontinuation question above; the 1 Layer 3 fail is the multi-source</span>
-<span id="cb1-279"><a href="#cb1-279" aria-hidden="true" tabindex="-1"></a>question only.</span>
+<span id="cb1-269"><a href="#cb1-269" aria-hidden="true" tabindex="-1"></a>The 2 Layer 2 fails are the multi-source question and the</span>
+<span id="cb1-270"><a href="#cb1-270" aria-hidden="true" tabindex="-1"></a>discontinuation question above; the 1 Layer 3 fail is the multi-source</span>
+<span id="cb1-271"><a href="#cb1-271" aria-hidden="true" tabindex="-1"></a>question only.</span>
+<span id="cb1-272"><a href="#cb1-272" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-273"><a href="#cb1-273" aria-hidden="true" tabindex="-1"></a>Real run, after BM25 and reranking, 2026-08-14:</span>
+<span id="cb1-274"><a href="#cb1-274" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-275"><a href="#cb1-275" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer             <span class="pp">|</span> Pass <span class="pp">|</span> Fail <span class="pp">|</span> Skip <span class="pp">|</span></span>
+<span id="cb1-276"><a href="#cb1-276" aria-hidden="true" tabindex="-1"></a><span class="pp">|-------------------|------|------|------|</span></span>
+<span id="cb1-277"><a href="#cb1-277" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 1 - Routing <span class="pp">|</span> 30   <span class="pp">|</span> 0    <span class="pp">|</span> 0    <span class="pp">|</span></span>
+<span id="cb1-278"><a href="#cb1-278" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 2 - Rules   <span class="pp">|</span> 28   <span class="pp">|</span> 2    <span class="pp">|</span> 0    <span class="pp">|</span></span>
+<span id="cb1-279"><a href="#cb1-279" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 3 - Answer  <span class="pp">|</span> 29   <span class="pp">|</span> 1    <span class="pp">|</span> 0    <span class="pp">|</span></span>
 <span id="cb1-280"><a href="#cb1-280" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-281"><a href="#cb1-281" aria-hidden="true" tabindex="-1"></a><span class="fu">## Test the Agent - testing Path B</span></span>
+<span id="cb1-281"><a href="#cb1-281" aria-hidden="true" tabindex="-1"></a>After adding BM25 keyword search and the cross-encoder reranker: </span>
 <span id="cb1-282"><a href="#cb1-282" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-283"><a href="#cb1-283" aria-hidden="true" tabindex="-1"></a>*This is Path B&#39;s check - see it in context on the Project Overview page&#39;s [Layer 5 - Two Question Paths](index.html#layer-5---two-question-paths).*</span>
-<span id="cb1-284"><a href="#cb1-284" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-285"><a href="#cb1-285" aria-hidden="true" tabindex="-1"></a>This is the same 30 questions, the same three-layer design, run against</span>
-<span id="cb1-286"><a href="#cb1-286" aria-hidden="true" tabindex="-1"></a>the agent (Path B) instead - the only structural difference is that</span>
-<span id="cb1-287"><a href="#cb1-287" aria-hidden="true" tabindex="-1"></a>Layer 1 checks which *tool* the agent chose to call, and Layer 2 checks</span>
-<span id="cb1-288"><a href="#cb1-288" aria-hidden="true" tabindex="-1"></a>the *arguments* it called that tool with, since the agent&#39;s internal</span>
-<span id="cb1-289"><a href="#cb1-289" aria-hidden="true" tabindex="-1"></a>reasoning is what&#39;s being tested here rather than fixed regex patterns.</span>
+<span id="cb1-283"><a href="#cb1-283" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Identical result, 30/0, 28/2, 29/1, same two</span>
+<span id="cb1-284"><a href="#cb1-284" aria-hidden="true" tabindex="-1"></a>questions failing for the same reasons. That&#39;s expected, not a sign the</span>
+<span id="cb1-285"><a href="#cb1-285" aria-hidden="true" tabindex="-1"></a>fix did nothing - the two Path A fails here are a structural limitation</span>
+<span id="cb1-286"><a href="#cb1-286" aria-hidden="true" tabindex="-1"></a>(the multi-source question) and a specific retrieval case that the fix</span>
+<span id="cb1-287"><a href="#cb1-287" aria-hidden="true" tabindex="-1"></a>improved elsewhere but didn&#39;t resolve for this exact question (see</span>
+<span id="cb1-288"><a href="#cb1-288" aria-hidden="true" tabindex="-1"></a>Retrieval ranking quality below for the measured improvement and what&#39;s</span>
+<span id="cb1-289"><a href="#cb1-289" aria-hidden="true" tabindex="-1"></a>still missing).</span>
 <span id="cb1-290"><a href="#cb1-290" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-291"><a href="#cb1-291" aria-hidden="true" tabindex="-1"></a>Running with <span class="in">`AGENT_LLM=mock`</span> swaps in a lightweight, deterministic</span>
-<span id="cb1-292"><a href="#cb1-292" aria-hidden="true" tabindex="-1"></a>stand-in for the real model - free to run, useful for confirming the</span>
-<span id="cb1-293"><a href="#cb1-293" aria-hidden="true" tabindex="-1"></a>harness itself works, but a much weaker signal, since the mock&#39;s simple</span>
-<span id="cb1-294"><a href="#cb1-294" aria-hidden="true" tabindex="-1"></a>keyword planner can&#39;t reason the way a real model does. The real check</span>
-<span id="cb1-295"><a href="#cb1-295" aria-hidden="true" tabindex="-1"></a>only happens with a live <span class="in">`API_KEY`</span> set.</span>
-<span id="cb1-296"><a href="#cb1-296" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-297"><a href="#cb1-297" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning}</span>
-<span id="cb1-298"><a href="#cb1-298" aria-hidden="true" tabindex="-1"></a><span class="fu">### Issues Found</span></span>
-<span id="cb1-299"><a href="#cb1-299" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-300"><a href="#cb1-300" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**A genuine phrase-consistency bug**: &quot;top prescriber&quot; was being</span>
-<span id="cb1-301"><a href="#cb1-301" aria-hidden="true" tabindex="-1"></a>  resolved by script volume in some questions and by propensity score in</span>
-<span id="cb1-302"><a href="#cb1-302" aria-hidden="true" tabindex="-1"></a>  others - same words, different meaning depending on context.</span>
-<span id="cb1-303"><a href="#cb1-303" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**A silent region-substitution problem**: asked for an undefined</span>
-<span id="cb1-304"><a href="#cb1-304" aria-hidden="true" tabindex="-1"></a>  region like &quot;the Southeast&quot; or &quot;the Rust Belt&quot;, the agent used to</span>
-<span id="cb1-305"><a href="#cb1-305" aria-hidden="true" tabindex="-1"></a>  quietly decompose it into a self-assembled list of states from its own</span>
-<span id="cb1-306"><a href="#cb1-306" aria-hidden="true" tabindex="-1"></a>  general knowledge - a real risk, since different sources genuinely</span>
-<span id="cb1-307"><a href="#cb1-307" aria-hidden="true" tabindex="-1"></a>  disagree on which states count.</span>
-<span id="cb1-308"><a href="#cb1-308" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**A missing &quot;how did you get there&quot; explanation**: the agent could</span>
-<span id="cb1-309"><a href="#cb1-309" aria-hidden="true" tabindex="-1"></a>  correctly identify &quot;good opportunities&quot;, but the written answer</span>
-<span id="cb1-310"><a href="#cb1-310" aria-hidden="true" tabindex="-1"></a>  sometimes never said that &quot;highest propensity&quot; was the criterion,</span>
-<span id="cb1-311"><a href="#cb1-311" aria-hidden="true" tabindex="-1"></a>  leaving a reader to guess whether it meant highest volume instead.</span>
-<span id="cb1-312"><a href="#cb1-312" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**An outdated eval definition, not an agent bug** (Question 13,</span>
-<span id="cb1-313"><a href="#cb1-313" aria-hidden="true" tabindex="-1"></a>  comparing an HCP to a specialty benchmark): a later run showed the</span>
-<span id="cb1-314"><a href="#cb1-314" aria-hidden="true" tabindex="-1"></a>  agent using the newer <span class="in">`aggregate_hcp_stats`</span> tool to compute the exact</span>
-<span id="cb1-315"><a href="#cb1-315" aria-hidden="true" tabindex="-1"></a>  benchmark directly, instead of retrieving the older narrative</span>
-<span id="cb1-316"><a href="#cb1-316" aria-hidden="true" tabindex="-1"></a>  benchmark document - a genuine improvement the eval hadn&#39;t been</span>
-<span id="cb1-317"><a href="#cb1-317" aria-hidden="true" tabindex="-1"></a>  updated to recognise as valid yet.</span>
-<span id="cb1-318"><a href="#cb1-318" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**A rigid phrase-matching bug in the eval itself** (Question 25, an</span>
-<span id="cb1-319"><a href="#cb1-319" aria-hidden="true" tabindex="-1"></a>  unresolved-referent question): a fully correct clarification answer</span>
-<span id="cb1-320"><a href="#cb1-320" aria-hidden="true" tabindex="-1"></a>  (&quot;The doctor&#39;s NPI (10-digit number)...&quot;) failed only because the</span>
-<span id="cb1-321"><a href="#cb1-321" aria-hidden="true" tabindex="-1"></a>  check demanded an exact phrase in one specific word order.</span>
-<span id="cb1-322"><a href="#cb1-322" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Question 23**, the discontinuation question (&quot;why do patients stop</span>
-<span id="cb1-323"><a href="#cb1-323" aria-hidden="true" tabindex="-1"></a>  taking GLP-1s after a year&quot;), fails Layer 2 - the correct document</span>
-<span id="cb1-324"><a href="#cb1-324" aria-hidden="true" tabindex="-1"></a>  chunk isn&#39;t retrieved, a genuine embedding-model limitation confirmed</span>
-<span id="cb1-325"><a href="#cb1-325" aria-hidden="true" tabindex="-1"></a>  separately by the retrieval-ranking eval further down this page. This</span>
-<span id="cb1-326"><a href="#cb1-326" aria-hidden="true" tabindex="-1"></a>  one is **not fixed** - see below.</span>
-<span id="cb1-327"><a href="#cb1-327" aria-hidden="true" tabindex="-1"></a>:::</span>
-<span id="cb1-328"><a href="#cb1-328" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-329"><a href="#cb1-329" aria-hidden="true" tabindex="-1"></a><span class="fu">### The Fix</span></span>
-<span id="cb1-330"><a href="#cb1-330" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-331"><a href="#cb1-331" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Made the system prompt explicit that &quot;top prescriber&quot; always means</span>
-<span id="cb1-332"><a href="#cb1-332" aria-hidden="true" tabindex="-1"></a>  volume unless the question separately asks about opportunity or</span>
-<span id="cb1-333"><a href="#cb1-333" aria-hidden="true" tabindex="-1"></a>  propensity.</span>
-<span id="cb1-334"><a href="#cb1-334" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Fixed so the agent now names the four real regions and asks the rep to</span>
-<span id="cb1-335"><a href="#cb1-335" aria-hidden="true" tabindex="-1"></a>  specify states directly, instead of presenting its own guess as if it</span>
-<span id="cb1-336"><a href="#cb1-336" aria-hidden="true" tabindex="-1"></a>  were official data.</span>
-<span id="cb1-337"><a href="#cb1-337" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The system prompt now requires every ranked HCP or list to state its</span>
-<span id="cb1-338"><a href="#cb1-338" aria-hidden="true" tabindex="-1"></a>  ranking criterion explicitly, in plain prose - not just in a citation.</span>
-<span id="cb1-339"><a href="#cb1-339" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Updated Question 13&#39;s check to accept either valid path (the narrative</span>
-<span id="cb1-340"><a href="#cb1-340" aria-hidden="true" tabindex="-1"></a>  document or the newer aggregate-stats tool), rather than penalising</span>
-<span id="cb1-341"><a href="#cb1-341" aria-hidden="true" tabindex="-1"></a>  the agent for using the more precise option.</span>
-<span id="cb1-342"><a href="#cb1-342" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Redesigned the Question 25-style check to test the underlying</span>
-<span id="cb1-343"><a href="#cb1-343" aria-hidden="true" tabindex="-1"></a>  *concept* (mentions the identifier, and is asking for it) instead of</span>
-<span id="cb1-344"><a href="#cb1-344" aria-hidden="true" tabindex="-1"></a>  matching literal phrases - more robust to future rewording, not just a</span>
-<span id="cb1-345"><a href="#cb1-345" aria-hidden="true" tabindex="-1"></a>  patch for the one phrasing that was seen.</span>
-<span id="cb1-346"><a href="#cb1-346" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Question 23 was **not** patched, on purpose - see Remaining Issues</span>
-<span id="cb1-347"><a href="#cb1-347" aria-hidden="true" tabindex="-1"></a>  below.</span>
-<span id="cb1-348"><a href="#cb1-348" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-349"><a href="#cb1-349" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
-<span id="cb1-350"><a href="#cb1-350" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-351"><a href="#cb1-351" aria-hidden="true" tabindex="-1"></a>Real run, 2026-07-28:</span>
-<span id="cb1-352"><a href="#cb1-352" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-353"><a href="#cb1-353" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer             <span class="pp">|</span> Pass <span class="pp">|</span> Fail <span class="pp">|</span></span>
-<span id="cb1-354"><a href="#cb1-354" aria-hidden="true" tabindex="-1"></a><span class="pp">|-------------------|------|------|</span></span>
-<span id="cb1-355"><a href="#cb1-355" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 1 - Routing <span class="pp">|</span> 30   <span class="pp">|</span> 0    <span class="pp">|</span></span>
-<span id="cb1-356"><a href="#cb1-356" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 2 - Rules   <span class="pp">|</span> 29   <span class="pp">|</span> 1    <span class="pp">|</span></span>
-<span id="cb1-357"><a href="#cb1-357" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 3 - Answer  <span class="pp">|</span> 30   <span class="pp">|</span> 0    <span class="pp">|</span></span>
-<span id="cb1-358"><a href="#cb1-358" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-359"><a href="#cb1-359" aria-hidden="true" tabindex="-1"></a>**Remaining issue:** Question 23 still fails Layer 2, and is expected to</span>
-<span id="cb1-360"><a href="#cb1-360" aria-hidden="true" tabindex="-1"></a>keep failing - it is a genuine, documented embedding-model limitation</span>
-<span id="cb1-361"><a href="#cb1-361" aria-hidden="true" tabindex="-1"></a>(see the retrieval-ranking section further down), not something this</span>
-<span id="cb1-362"><a href="#cb1-362" aria-hidden="true" tabindex="-1"></a>eval or a prompt change can fix. Every other issue found across both</span>
-<span id="cb1-363"><a href="#cb1-363" aria-hidden="true" tabindex="-1"></a>runs is confirmed resolved.</span>
-<span id="cb1-364"><a href="#cb1-364" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-365"><a href="#cb1-365" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-366"><a href="#cb1-366" aria-hidden="true" tabindex="-1"></a><span class="fu">## Phrasing consistency</span></span>
-<span id="cb1-367"><a href="#cb1-367" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-368"><a href="#cb1-368" aria-hidden="true" tabindex="-1"></a>The golden 30 uses fixed wording, every time - useful for &quot;did we break</span>
-<span id="cb1-369"><a href="#cb1-369" aria-hidden="true" tabindex="-1"></a>something,&quot; useless for &quot;does this generalise to a question worded</span>
-<span id="cb1-370"><a href="#cb1-370" aria-hidden="true" tabindex="-1"></a>differently.&quot; <span class="in">`test_phrasing_consistency.py`</span> takes 10 of the 30</span>
-<span id="cb1-371"><a href="#cb1-371" aria-hidden="true" tabindex="-1"></a>questions, reuses their exact same three-layer checks (rather than</span>
-<span id="cb1-372"><a href="#cb1-372" aria-hidden="true" tabindex="-1"></a>redefining what &quot;correct&quot; means a second time), and runs each one</span>
-<span id="cb1-373"><a href="#cb1-373" aria-hidden="true" tabindex="-1"></a>through its original wording plus two genuinely different rephrasings -</span>
-<span id="cb1-374"><a href="#cb1-374" aria-hidden="true" tabindex="-1"></a>different structure, register, or abbreviation, not a synonym swap.</span>
+<span id="cb1-291"><a href="#cb1-291" aria-hidden="true" tabindex="-1"></a><span class="fu">## Test the Agent - testing Path B</span></span>
+<span id="cb1-292"><a href="#cb1-292" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-293"><a href="#cb1-293" aria-hidden="true" tabindex="-1"></a>*This is Path B&#39;s check - see it in context on the Project Overview page&#39;s [Layer 5 - Two Question Paths](index.html#layer-5---two-question-paths).*</span>
+<span id="cb1-294"><a href="#cb1-294" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-295"><a href="#cb1-295" aria-hidden="true" tabindex="-1"></a>This is the same 30 questions, the same three-layer design, run against</span>
+<span id="cb1-296"><a href="#cb1-296" aria-hidden="true" tabindex="-1"></a>the agent (Path B) instead - the only structural difference is that</span>
+<span id="cb1-297"><a href="#cb1-297" aria-hidden="true" tabindex="-1"></a>Layer 1 checks which *tool* the agent chose to call, and Layer 2 checks</span>
+<span id="cb1-298"><a href="#cb1-298" aria-hidden="true" tabindex="-1"></a>the *arguments* it called that tool with, since the agent&#39;s internal</span>
+<span id="cb1-299"><a href="#cb1-299" aria-hidden="true" tabindex="-1"></a>reasoning is what&#39;s being tested here rather than fixed regex patterns.</span>
+<span id="cb1-300"><a href="#cb1-300" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-301"><a href="#cb1-301" aria-hidden="true" tabindex="-1"></a>Running with <span class="in">`AGENT_LLM=mock`</span> swaps in a lightweight, deterministic</span>
+<span id="cb1-302"><a href="#cb1-302" aria-hidden="true" tabindex="-1"></a>stand-in for the real model - free to run, useful for confirming the</span>
+<span id="cb1-303"><a href="#cb1-303" aria-hidden="true" tabindex="-1"></a>harness itself works, but a much weaker signal, since the mock&#39;s simple</span>
+<span id="cb1-304"><a href="#cb1-304" aria-hidden="true" tabindex="-1"></a>keyword planner can&#39;t reason the way a real model does. The real check</span>
+<span id="cb1-305"><a href="#cb1-305" aria-hidden="true" tabindex="-1"></a>only happens with a live <span class="in">`API_KEY`</span> set.</span>
+<span id="cb1-306"><a href="#cb1-306" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-307"><a href="#cb1-307" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning}</span>
+<span id="cb1-308"><a href="#cb1-308" aria-hidden="true" tabindex="-1"></a><span class="fu">### Issues Found</span></span>
+<span id="cb1-309"><a href="#cb1-309" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-310"><a href="#cb1-310" aria-hidden="true" tabindex="-1"></a>No issues as of last run - a clean 30/30/30.</span>
+<span id="cb1-311"><a href="#cb1-311" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb1-312"><a href="#cb1-312" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-313"><a href="#cb1-313" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
+<span id="cb1-314"><a href="#cb1-314" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-315"><a href="#cb1-315" aria-hidden="true" tabindex="-1"></a>Real run, 2026-07-28:</span>
+<span id="cb1-316"><a href="#cb1-316" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-317"><a href="#cb1-317" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer             <span class="pp">|</span> Pass <span class="pp">|</span> Fail <span class="pp">|</span></span>
+<span id="cb1-318"><a href="#cb1-318" aria-hidden="true" tabindex="-1"></a><span class="pp">|-------------------|------|------|</span></span>
+<span id="cb1-319"><a href="#cb1-319" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 1 - Routing <span class="pp">|</span> 30   <span class="pp">|</span> 0    <span class="pp">|</span></span>
+<span id="cb1-320"><a href="#cb1-320" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 2 - Rules   <span class="pp">|</span> 29   <span class="pp">|</span> 1    <span class="pp">|</span></span>
+<span id="cb1-321"><a href="#cb1-321" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 3 - Answer  <span class="pp">|</span> 30   <span class="pp">|</span> 0    <span class="pp">|</span></span>
+<span id="cb1-322"><a href="#cb1-322" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-323"><a href="#cb1-323" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-324"><a href="#cb1-324" aria-hidden="true" tabindex="-1"></a>Real run, after BM25 and reranking, 2026-08-14:</span>
+<span id="cb1-325"><a href="#cb1-325" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-326"><a href="#cb1-326" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer             <span class="pp">|</span> Pass <span class="pp">|</span> Fail <span class="pp">|</span></span>
+<span id="cb1-327"><a href="#cb1-327" aria-hidden="true" tabindex="-1"></a><span class="pp">|-------------------|------|------|</span></span>
+<span id="cb1-328"><a href="#cb1-328" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 1 - Routing <span class="pp">|</span> 30   <span class="pp">|</span> 0    <span class="pp">|</span></span>
+<span id="cb1-329"><a href="#cb1-329" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 2 - Rules   <span class="pp">|</span> 30   <span class="pp">|</span> 0    <span class="pp">|</span></span>
+<span id="cb1-330"><a href="#cb1-330" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 3 - Answer  <span class="pp">|</span> 30   <span class="pp">|</span> 0    <span class="pp">|</span></span>
+<span id="cb1-331"><a href="#cb1-331" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-332"><a href="#cb1-332" aria-hidden="true" tabindex="-1"></a>A genuine, fresh 30/30/30 - not a re-score of an old answer against the</span>
+<span id="cb1-333"><a href="#cb1-333" aria-hidden="true" tabindex="-1"></a>corrected ground truth, but a live re-run confirming the fix holds up.</span>
+<span id="cb1-334"><a href="#cb1-334" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-335"><a href="#cb1-335" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-336"><a href="#cb1-336" aria-hidden="true" tabindex="-1"></a><span class="fu">## Phrasing consistency</span></span>
+<span id="cb1-337"><a href="#cb1-337" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-338"><a href="#cb1-338" aria-hidden="true" tabindex="-1"></a>The golden 30 uses fixed wording, every time - useful for &quot;did we break</span>
+<span id="cb1-339"><a href="#cb1-339" aria-hidden="true" tabindex="-1"></a>something,&quot; useless for &quot;does this generalise to a question worded</span>
+<span id="cb1-340"><a href="#cb1-340" aria-hidden="true" tabindex="-1"></a>differently.&quot; <span class="in">`test_phrasing_consistency.py`</span> takes 10 of the 30</span>
+<span id="cb1-341"><a href="#cb1-341" aria-hidden="true" tabindex="-1"></a>questions, reuses their exact same three-layer checks (rather than</span>
+<span id="cb1-342"><a href="#cb1-342" aria-hidden="true" tabindex="-1"></a>redefining what &quot;correct&quot; means a second time), and runs each one</span>
+<span id="cb1-343"><a href="#cb1-343" aria-hidden="true" tabindex="-1"></a>through its original wording plus two genuinely different rephrasings -</span>
+<span id="cb1-344"><a href="#cb1-344" aria-hidden="true" tabindex="-1"></a>different structure, register, or abbreviation, not a synonym swap.</span>
+<span id="cb1-345"><a href="#cb1-345" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-346"><a href="#cb1-346" aria-hidden="true" tabindex="-1"></a>A question is scored *consistent* only if all three phrasings</span>
+<span id="cb1-347"><a href="#cb1-347" aria-hidden="true" tabindex="-1"></a>independently pass every layer on their own merits - checked against the</span>
+<span id="cb1-348"><a href="#cb1-348" aria-hidden="true" tabindex="-1"></a>same live ground truth each time, not just checked against each other.</span>
+<span id="cb1-349"><a href="#cb1-349" aria-hidden="true" tabindex="-1"></a>That&#39;s a stronger bar than simple agreement: three answers could easily</span>
+<span id="cb1-350"><a href="#cb1-350" aria-hidden="true" tabindex="-1"></a>agree with each other while all being wrong in the same way, but they</span>
+<span id="cb1-351"><a href="#cb1-351" aria-hidden="true" tabindex="-1"></a>can&#39;t all independently match the real, live-computed answer unless</span>
+<span id="cb1-352"><a href="#cb1-352" aria-hidden="true" tabindex="-1"></a>they&#39;re actually right.</span>
+<span id="cb1-353"><a href="#cb1-353" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-354"><a href="#cb1-354" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning}</span>
+<span id="cb1-355"><a href="#cb1-355" aria-hidden="true" tabindex="-1"></a><span class="fu">### Issues Found</span></span>
+<span id="cb1-356"><a href="#cb1-356" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-357"><a href="#cb1-357" aria-hidden="true" tabindex="-1"></a>Real run, 2026-08-14 (<span class="in">`test_phrasing_consistency.py`</span>, full 10-anchor</span>
+<span id="cb1-358"><a href="#cb1-358" aria-hidden="true" tabindex="-1"></a>suite, re-run end-to-end):</span>
+<span id="cb1-359"><a href="#cb1-359" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-360"><a href="#cb1-360" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Q28** - *&quot;Which HCPs are in the Southeast region?&quot;* - the agent</span>
+<span id="cb1-361"><a href="#cb1-361" aria-hidden="true" tabindex="-1"></a>  answered correctly, but the check still marked it wrong. All three</span>
+<span id="cb1-362"><a href="#cb1-362" aria-hidden="true" tabindex="-1"></a>  phrasings correctly refused to answer (Southeast isn&#39;t a real region),</span>
+<span id="cb1-363"><a href="#cb1-363" aria-hidden="true" tabindex="-1"></a>  with zero tool calls each time - a genuinely correct response. The</span>
+<span id="cb1-364"><a href="#cb1-364" aria-hidden="true" tabindex="-1"></a>  problem is the check itself: it only accepts 8 specific fixed phrases</span>
+<span id="cb1-365"><a href="#cb1-365" aria-hidden="true" tabindex="-1"></a>  as proof of a valid refusal (things like &quot;not a real region,&quot; &quot;valid</span>
+<span id="cb1-366"><a href="#cb1-366" aria-hidden="true" tabindex="-1"></a>  values are&quot;). One rephrasing, *&quot;Show me HCPs in the Southeastern US,&quot;*</span>
+<span id="cb1-367"><a href="#cb1-367" aria-hidden="true" tabindex="-1"></a>  refused correctly but worded it differently, so its answer didn&#39;t</span>
+<span id="cb1-368"><a href="#cb1-368" aria-hidden="true" tabindex="-1"></a>  contain any of those 8 phrases - and got marked FAIL even though it</span>
+<span id="cb1-369"><a href="#cb1-369" aria-hidden="true" tabindex="-1"></a>  was right. Not a retrieval or routing bug, and not the agent doing</span>
+<span id="cb1-370"><a href="#cb1-370" aria-hidden="true" tabindex="-1"></a>  anything wrong - the check&#39;s phrase list is just too narrow.</span>
+<span id="cb1-371"><a href="#cb1-371" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb1-372"><a href="#cb1-372" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-373"><a href="#cb1-373" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-374"><a href="#cb1-374" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
 <span id="cb1-375"><a href="#cb1-375" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-376"><a href="#cb1-376" aria-hidden="true" tabindex="-1"></a>A question is scored *consistent* only if all three phrasings</span>
-<span id="cb1-377"><a href="#cb1-377" aria-hidden="true" tabindex="-1"></a>independently pass every layer on their own merits - checked against the</span>
-<span id="cb1-378"><a href="#cb1-378" aria-hidden="true" tabindex="-1"></a>same live ground truth each time, not just checked against each other.</span>
-<span id="cb1-379"><a href="#cb1-379" aria-hidden="true" tabindex="-1"></a>That&#39;s a stronger bar than simple agreement: three answers could easily</span>
-<span id="cb1-380"><a href="#cb1-380" aria-hidden="true" tabindex="-1"></a>agree with each other while all being wrong in the same way, but they</span>
-<span id="cb1-381"><a href="#cb1-381" aria-hidden="true" tabindex="-1"></a>can&#39;t all independently match the real, live-computed answer unless</span>
-<span id="cb1-382"><a href="#cb1-382" aria-hidden="true" tabindex="-1"></a>they&#39;re actually right.</span>
-<span id="cb1-383"><a href="#cb1-383" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-384"><a href="#cb1-384" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning}</span>
-<span id="cb1-385"><a href="#cb1-385" aria-hidden="true" tabindex="-1"></a><span class="fu">### Issues Found</span></span>
-<span id="cb1-386"><a href="#cb1-386" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-387"><a href="#cb1-387" aria-hidden="true" tabindex="-1"></a>The canonical wording for this targeting question already worked</span>
-<span id="cb1-388"><a href="#cb1-388" aria-hidden="true" tabindex="-1"></a>correctly:</span>
-<span id="cb1-389"><a href="#cb1-389" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-390"><a href="#cb1-390" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; *&quot;Show me High-propensity endocrinologists in Florida who are not</span></span>
-<span id="cb1-391"><a href="#cb1-391" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; currently targeted.&quot;*</span></span>
-<span id="cb1-392"><a href="#cb1-392" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-393"><a href="#cb1-393" aria-hidden="true" tabindex="-1"></a>This version explicitly names **High** as the tier, so the agent</span>
-<span id="cb1-394"><a href="#cb1-394" aria-hidden="true" tabindex="-1"></a>reliably applied <span class="in">`tier=&quot;High&quot;`</span> as a real filter argument before</span>
-<span id="cb1-395"><a href="#cb1-395" aria-hidden="true" tabindex="-1"></a>returning results.</span>
+<span id="cb1-376"><a href="#cb1-376" aria-hidden="true" tabindex="-1"></a>Real run, after BM25 and reranking, 2026-08-14:</span>
+<span id="cb1-377"><a href="#cb1-377" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-378"><a href="#cb1-378" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span>                    <span class="pp">|</span> Consistent <span class="pp">|</span> Inconsistent <span class="pp">|</span></span>
+<span id="cb1-379"><a href="#cb1-379" aria-hidden="true" tabindex="-1"></a><span class="pp">|--------------------|------------|--------------|</span></span>
+<span id="cb1-380"><a href="#cb1-380" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Anchors (10 total) <span class="pp">|</span> 9          <span class="pp">|</span> 1            <span class="pp">|</span></span>
+<span id="cb1-381"><a href="#cb1-381" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-382"><a href="#cb1-382" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-383"><a href="#cb1-383" aria-hidden="true" tabindex="-1"></a><span class="fu">## Retrieval ranking quality</span></span>
+<span id="cb1-384"><a href="#cb1-384" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-385"><a href="#cb1-385" aria-hidden="true" tabindex="-1"></a>The existing narrative checks only ever verified that the correct</span>
+<span id="cb1-386"><a href="#cb1-386" aria-hidden="true" tabindex="-1"></a>document chunk was retrieved *somewhere* in the results. They couldn&#39;t</span>
+<span id="cb1-387"><a href="#cb1-387" aria-hidden="true" tabindex="-1"></a>tell a chunk ranked first apart from one buried third or fourth - and</span>
+<span id="cb1-388"><a href="#cb1-388" aria-hidden="true" tabindex="-1"></a>since the model reads results in order and weighs the top one most</span>
+<span id="cb1-389"><a href="#cb1-389" aria-hidden="true" tabindex="-1"></a>heavily, that distinction matters. <span class="in">`test_retrieval_ranking.py`</span> calls the</span>
+<span id="cb1-390"><a href="#cb1-390" aria-hidden="true" tabindex="-1"></a>search engine directly (bypassing the LLM entirely, so it costs nothing</span>
+<span id="cb1-391"><a href="#cb1-391" aria-hidden="true" tabindex="-1"></a>to run) and checks, for each narrative question, whether the correct</span>
+<span id="cb1-392"><a href="#cb1-392" aria-hidden="true" tabindex="-1"></a>chunk is ranked #1.</span>
+<span id="cb1-393"><a href="#cb1-393" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-394"><a href="#cb1-394" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning}</span>
+<span id="cb1-395"><a href="#cb1-395" aria-hidden="true" tabindex="-1"></a><span class="fu">### Issues Found</span></span>
 <span id="cb1-396"><a href="#cb1-396" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-397"><a href="#cb1-397" aria-hidden="true" tabindex="-1"></a>One of the two rephrasings used for the consistency check was:</span>
-<span id="cb1-398"><a href="#cb1-398" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-399"><a href="#cb1-399" aria-hidden="true" tabindex="-1"></a><span class="at">&gt; *&quot;Any good endo targets in FL we&#39;re not calling on?&quot;*</span></span>
-<span id="cb1-400"><a href="#cb1-400" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-401"><a href="#cb1-401" aria-hidden="true" tabindex="-1"></a>Same underlying question - endocrinologists in Florida, untargeted,</span>
-<span id="cb1-402"><a href="#cb1-402" aria-hidden="true" tabindex="-1"></a>worth pursuing - just worded the way a rep might actually type it,</span>
-<span id="cb1-403"><a href="#cb1-403" aria-hidden="true" tabindex="-1"></a>without the literal word &quot;High&quot; anywhere in it.</span>
-<span id="cb1-404"><a href="#cb1-404" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-405"><a href="#cb1-405" aria-hidden="true" tabindex="-1"></a>**What went wrong:** the agent correctly understood this as a targeting</span>
-<span id="cb1-406"><a href="#cb1-406" aria-hidden="true" tabindex="-1"></a>question, but instead of applying <span class="in">`tier=&quot;High&quot;`</span> as a filter, it called</span>
-<span id="cb1-407"><a href="#cb1-407" aria-hidden="true" tabindex="-1"></a>the tool with **no tier filter at all**, then just sorted the full,</span>
-<span id="cb1-408"><a href="#cb1-408" aria-hidden="true" tabindex="-1"></a>unfiltered result by propensity score. The written answer looked</span>
-<span id="cb1-409"><a href="#cb1-409" aria-hidden="true" tabindex="-1"></a>completely normal - a clean list of Florida endocrinologists, propensity</span>
-<span id="cb1-410"><a href="#cb1-410" aria-hidden="true" tabindex="-1"></a>scores included, nothing obviously off - but it silently mixed in</span>
-<span id="cb1-411"><a href="#cb1-411" aria-hidden="true" tabindex="-1"></a>**Medium and Watch-tier HCPs** alongside the High-tier ones the rep</span>
-<span id="cb1-412"><a href="#cb1-412" aria-hidden="true" tabindex="-1"></a>actually asked for.</span>
-<span id="cb1-413"><a href="#cb1-413" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-414"><a href="#cb1-414" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The literal-wording version correctly returned **11** untargeted</span>
-<span id="cb1-415"><a href="#cb1-415" aria-hidden="true" tabindex="-1"></a>  High-tier Florida endocrinologists.</span>
-<span id="cb1-416"><a href="#cb1-416" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The informally-worded version returned a **15**-HCP list, only some of</span>
-<span id="cb1-417"><a href="#cb1-417" aria-hidden="true" tabindex="-1"></a>  which were genuinely High-tier - a rep skimming the names, not the</span>
-<span id="cb1-418"><a href="#cb1-418" aria-hidden="true" tabindex="-1"></a>  fine print, could easily call on the wrong doctor believing they were</span>
-<span id="cb1-419"><a href="#cb1-419" aria-hidden="true" tabindex="-1"></a>  all top-tier opportunities.</span>
+<span id="cb1-397"><a href="#cb1-397" aria-hidden="true" tabindex="-1"></a>Real run, 2026-08-14 (BM25 + reranker in place) - 2 of 10 narrative</span>
+<span id="cb1-398"><a href="#cb1-398" aria-hidden="true" tabindex="-1"></a>questions still don&#39;t rank their correct chunk first:</span>
+<span id="cb1-399"><a href="#cb1-399" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-400"><a href="#cb1-400" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`prior_auth_access`** - *&quot;How is prior authorization affecting</span>
+<span id="cb1-401"><a href="#cb1-401" aria-hidden="true" tabindex="-1"></a>  access?&quot;* - retrieval issue: correct chunk present, but ranked #2,</span>
+<span id="cb1-402"><a href="#cb1-402" aria-hidden="true" tabindex="-1"></a>  not #1. This isn&#39;t really a problem as the correct chunk is #2 which is acceptable.</span>
+<span id="cb1-403"><a href="#cb1-403" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`discontinuation`** - *&quot;Why do patients stop taking GLP-1s after a</span>
+<span id="cb1-404"><a href="#cb1-404" aria-hidden="true" tabindex="-1"></a>  year?&quot;* - retrieval fail: correct chunk missing entirely from the</span>
+<span id="cb1-405"><a href="#cb1-405" aria-hidden="true" tabindex="-1"></a>  results, even with a well-formed search query. This is a known issue documented in test the system as well.</span>
+<span id="cb1-406"><a href="#cb1-406" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb1-407"><a href="#cb1-407" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-408"><a href="#cb1-408" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-409"><a href="#cb1-409" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
+<span id="cb1-410"><a href="#cb1-410" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-411"><a href="#cb1-411" aria-hidden="true" tabindex="-1"></a>Real run, 2026-07-28:</span>
+<span id="cb1-412"><a href="#cb1-412" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-413"><a href="#cb1-413" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Outcome                                  <span class="pp">|</span> Questions <span class="pp">|</span></span>
+<span id="cb1-414"><a href="#cb1-414" aria-hidden="true" tabindex="-1"></a><span class="pp">|------------------------------------------|-----------|</span></span>
+<span id="cb1-415"><a href="#cb1-415" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk ranked #1                  <span class="pp">|</span> 6 / 10    <span class="pp">|</span></span>
+<span id="cb1-416"><a href="#cb1-416" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk present, but not ranked #1 <span class="pp">|</span> 3 / 10    <span class="pp">|</span></span>
+<span id="cb1-417"><a href="#cb1-417" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk missing entirely           <span class="pp">|</span> 1 / 10    <span class="pp">|</span></span>
+<span id="cb1-418"><a href="#cb1-418" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-419"><a href="#cb1-419" aria-hidden="true" tabindex="-1"></a>Real run, after BM25 and reranking, 2026-08-14:</span>
 <span id="cb1-420"><a href="#cb1-420" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-421"><a href="#cb1-421" aria-hidden="true" tabindex="-1"></a>Why this matters beyond just &quot;the number was different&quot;: the answer</span>
-<span id="cb1-422"><a href="#cb1-422" aria-hidden="true" tabindex="-1"></a>wasn&#39;t wrong in an obvious way - it read fine, cited its source, and</span>
-<span id="cb1-423"><a href="#cb1-423" aria-hidden="true" tabindex="-1"></a>wasn&#39;t hallucinated. The problem was invisible in the prose itself and</span>
-<span id="cb1-424"><a href="#cb1-424" aria-hidden="true" tabindex="-1"></a>only showed up by checking the *underlying tool call arguments* against</span>
-<span id="cb1-425"><a href="#cb1-425" aria-hidden="true" tabindex="-1"></a>what the question actually implied.</span>
-<span id="cb1-426"><a href="#cb1-426" aria-hidden="true" tabindex="-1"></a>:::</span>
-<span id="cb1-427"><a href="#cb1-427" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-428"><a href="#cb1-428" aria-hidden="true" tabindex="-1"></a><span class="fu">### The Fix</span></span>
-<span id="cb1-429"><a href="#cb1-429" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-430"><a href="#cb1-430" aria-hidden="true" tabindex="-1"></a>An explicit rule was added to the system prompt stating that when a</span>
-<span id="cb1-431"><a href="#cb1-431" aria-hidden="true" tabindex="-1"></a>question *implies* a tier without naming it outright - phrases like</span>
-<span id="cb1-432"><a href="#cb1-432" aria-hidden="true" tabindex="-1"></a>*&quot;good targets&quot;*, *&quot;worth calling on&quot;*, *&quot;High-propensity&quot;* used</span>
-<span id="cb1-433"><a href="#cb1-433" aria-hidden="true" tabindex="-1"></a>loosely - the agent must still apply the real tier filter on the tool</span>
-<span id="cb1-434"><a href="#cb1-434" aria-hidden="true" tabindex="-1"></a>call itself, not just describe the group that way in the written answer</span>
-<span id="cb1-435"><a href="#cb1-435" aria-hidden="true" tabindex="-1"></a>afterward. Re-tested after the fix: the same informal phrasing now</span>
-<span id="cb1-436"><a href="#cb1-436" aria-hidden="true" tabindex="-1"></a>correctly applies <span class="in">`tier=&quot;High&quot;`</span> and returns the same 11 HCPs as the</span>
-<span id="cb1-437"><a href="#cb1-437" aria-hidden="true" tabindex="-1"></a>literal wording.</span>
-<span id="cb1-438"><a href="#cb1-438" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-439"><a href="#cb1-439" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
-<span id="cb1-440"><a href="#cb1-440" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-441"><a href="#cb1-441" aria-hidden="true" tabindex="-1"></a>Real run, 2026-07-28:</span>
-<span id="cb1-442"><a href="#cb1-442" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-443"><a href="#cb1-443" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span>                    <span class="pp">|</span> Consistent <span class="pp">|</span> Inconsistent <span class="pp">|</span></span>
-<span id="cb1-444"><a href="#cb1-444" aria-hidden="true" tabindex="-1"></a><span class="pp">|--------------------|------------|--------------|</span></span>
-<span id="cb1-445"><a href="#cb1-445" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Anchors (10 total) <span class="pp">|</span> 9          <span class="pp">|</span> 1            <span class="pp">|</span></span>
+<span id="cb1-421"><a href="#cb1-421" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Outcome                                  <span class="pp">|</span> Questions <span class="pp">|</span></span>
+<span id="cb1-422"><a href="#cb1-422" aria-hidden="true" tabindex="-1"></a><span class="pp">|------------------------------------------|-----------|</span></span>
+<span id="cb1-423"><a href="#cb1-423" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk ranked #1                  <span class="pp">|</span> 8 / 10    <span class="pp">|</span></span>
+<span id="cb1-424"><a href="#cb1-424" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk present, but not ranked #1 <span class="pp">|</span> 1 / 10    <span class="pp">|</span></span>
+<span id="cb1-425"><a href="#cb1-425" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk missing entirely           <span class="pp">|</span> 1 / 10    <span class="pp">|</span></span>
+<span id="cb1-426"><a href="#cb1-426" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-427"><a href="#cb1-427" aria-hidden="true" tabindex="-1"></a>A real, measurable improvement: 2 more questions now rank their correct</span>
+<span id="cb1-428"><a href="#cb1-428" aria-hidden="true" tabindex="-1"></a>chunk first (6/10 -&gt; 8/10), and the one remaining &quot;present but not #1&quot;</span>
+<span id="cb1-429"><a href="#cb1-429" aria-hidden="true" tabindex="-1"></a>case (*&quot;how is prior authorization affecting access?&quot;*) now lands at</span>
+<span id="cb1-430"><a href="#cb1-430" aria-hidden="true" tabindex="-1"></a>rank #2, one place off the top, rather than further down.</span>
+<span id="cb1-431"><a href="#cb1-431" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-432"><a href="#cb1-432" aria-hidden="true" tabindex="-1"></a>**One limitation survives the fix.** *&quot;Why do patients stop taking</span>
+<span id="cb1-433"><a href="#cb1-433" aria-hidden="true" tabindex="-1"></a>GLP-1s after a year?&quot;* still doesn&#39;t retrieve its correct chunk at all,</span>
+<span id="cb1-434"><a href="#cb1-434" aria-hidden="true" tabindex="-1"></a>even with keyword search and reranking added. That rules out &quot;the</span>
+<span id="cb1-435"><a href="#cb1-435" aria-hidden="true" tabindex="-1"></a>embedding model&#39;s sense of meaning is the whole problem&quot; as an</span>
+<span id="cb1-436"><a href="#cb1-436" aria-hidden="true" tabindex="-1"></a>explanation - BM25 (literal word matching) and the reranker (joint</span>
+<span id="cb1-437"><a href="#cb1-437" aria-hidden="true" tabindex="-1"></a>reading of question + chunk) both had a chance to catch it here too, and</span>
+<span id="cb1-438"><a href="#cb1-438" aria-hidden="true" tabindex="-1"></a>neither did. This is now flagged as a genuinely harder retrieval case,</span>
+<span id="cb1-439"><a href="#cb1-439" aria-hidden="true" tabindex="-1"></a>not just an embedding-model quirk, and is the same question still</span>
+<span id="cb1-440"><a href="#cb1-440" aria-hidden="true" tabindex="-1"></a>showing up as Q23&#39;s Layer 2 fail in Test the System above. (Test the</span>
+<span id="cb1-441"><a href="#cb1-441" aria-hidden="true" tabindex="-1"></a>Agent&#39;s own Q23 no longer fails Layer 2 in the 2026-08-14 run - the</span>
+<span id="cb1-442"><a href="#cb1-442" aria-hidden="true" tabindex="-1"></a>agent&#39;s broader tool-driven search still finds a usable chunk even when</span>
+<span id="cb1-443"><a href="#cb1-443" aria-hidden="true" tabindex="-1"></a>this eval&#39;s direct ranking check doesn&#39;t see it land at rank #1.)</span>
+<span id="cb1-444"><a href="#cb1-444" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-445"><a href="#cb1-445" aria-hidden="true" tabindex="-1"></a><span class="fu">## Numeric / arithmetic accuracy</span></span>
 <span id="cb1-446"><a href="#cb1-446" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-447"><a href="#cb1-447" aria-hidden="true" tabindex="-1"></a>**This one is not confirmed fixed.** The 1 inconsistent anchor was the</span>
-<span id="cb1-448"><a href="#cb1-448" aria-hidden="true" tabindex="-1"></a>Florida endocrinologist targeting question above - a system-prompt</span>
-<span id="cb1-449"><a href="#cb1-449" aria-hidden="true" tabindex="-1"></a>change was made to address it, but that change was only checked with a</span>
-<span id="cb1-450"><a href="#cb1-450" aria-hidden="true" tabindex="-1"></a>narrow, one-off diagnostic question, not by re-running</span>
-<span id="cb1-451"><a href="#cb1-451" aria-hidden="true" tabindex="-1"></a><span class="in">`test_phrasing_consistency.py`</span> itself. Until the full 10-anchor suite is</span>
-<span id="cb1-452"><a href="#cb1-452" aria-hidden="true" tabindex="-1"></a>re-run end-to-end, this should be treated as an open item, not a</span>
-<span id="cb1-453"><a href="#cb1-453" aria-hidden="true" tabindex="-1"></a>confirmed resolution.</span>
-<span id="cb1-454"><a href="#cb1-454" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-455"><a href="#cb1-455" aria-hidden="true" tabindex="-1"></a><span class="fu">## Retrieval ranking quality</span></span>
+<span id="cb1-447"><a href="#cb1-447" aria-hidden="true" tabindex="-1"></a>Everything above checks whether the system finds the *right data*. This</span>
+<span id="cb1-448"><a href="#cb1-448" aria-hidden="true" tabindex="-1"></a>checks whether, when the agent has to do its own arithmetic on top of</span>
+<span id="cb1-449"><a href="#cb1-449" aria-hidden="true" tabindex="-1"></a>that data - a percentage, an average, a sum, a difference between two</span>
+<span id="cb1-450"><a href="#cb1-450" aria-hidden="true" tabindex="-1"></a>groups, a compound calculation - the maths itself is correct. Five</span>
+<span id="cb1-451"><a href="#cb1-451" aria-hidden="true" tabindex="-1"></a>genuinely different operations are tested (not the same operation</span>
+<span id="cb1-452"><a href="#cb1-452" aria-hidden="true" tabindex="-1"></a>repeated with different filters), each against a live, full-precision</span>
+<span id="cb1-453"><a href="#cb1-453" aria-hidden="true" tabindex="-1"></a>ground truth computed directly from the dataframe, with no rounding</span>
+<span id="cb1-454"><a href="#cb1-454" aria-hidden="true" tabindex="-1"></a>tolerance: whatever precision the agent&#39;s own answer uses, the true</span>
+<span id="cb1-455"><a href="#cb1-455" aria-hidden="true" tabindex="-1"></a>value rounded to that same precision must match exactly.</span>
 <span id="cb1-456"><a href="#cb1-456" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-457"><a href="#cb1-457" aria-hidden="true" tabindex="-1"></a>The existing narrative checks only ever verified that the correct</span>
-<span id="cb1-458"><a href="#cb1-458" aria-hidden="true" tabindex="-1"></a>document chunk was retrieved *somewhere* in the results. They couldn&#39;t</span>
-<span id="cb1-459"><a href="#cb1-459" aria-hidden="true" tabindex="-1"></a>tell a chunk ranked first apart from one buried third or fourth - and</span>
-<span id="cb1-460"><a href="#cb1-460" aria-hidden="true" tabindex="-1"></a>since the model reads results in order and weighs the top one most</span>
-<span id="cb1-461"><a href="#cb1-461" aria-hidden="true" tabindex="-1"></a>heavily, that distinction matters. <span class="in">`test_retrieval_ranking.py`</span> calls the</span>
-<span id="cb1-462"><a href="#cb1-462" aria-hidden="true" tabindex="-1"></a>search engine directly (bypassing the LLM entirely, so it costs nothing</span>
-<span id="cb1-463"><a href="#cb1-463" aria-hidden="true" tabindex="-1"></a>to run) and checks, for each narrative question, whether the correct</span>
-<span id="cb1-464"><a href="#cb1-464" aria-hidden="true" tabindex="-1"></a>chunk is ranked #1.</span>
-<span id="cb1-465"><a href="#cb1-465" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-466"><a href="#cb1-466" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning}</span>
-<span id="cb1-467"><a href="#cb1-467" aria-hidden="true" tabindex="-1"></a><span class="fu">### Issues Found</span></span>
-<span id="cb1-468"><a href="#cb1-468" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-469"><a href="#cb1-469" aria-hidden="true" tabindex="-1"></a>A real run against the actual embedding model found 4 of 10 narrative</span>
-<span id="cb1-470"><a href="#cb1-470" aria-hidden="true" tabindex="-1"></a>questions did not rank their correct chunk first, and one - *&quot;why do</span>
-<span id="cb1-471"><a href="#cb1-471" aria-hidden="true" tabindex="-1"></a>patients stop taking GLP-1s after a year&quot;* - didn&#39;t retrieve it at all,</span>
-<span id="cb1-472"><a href="#cb1-472" aria-hidden="true" tabindex="-1"></a>even with a well-formed search query. Confirmed on both Path A and Path</span>
-<span id="cb1-473"><a href="#cb1-473" aria-hidden="true" tabindex="-1"></a>B, ruling out query quality as the cause: this is a genuine limitation</span>
-<span id="cb1-474"><a href="#cb1-474" aria-hidden="true" tabindex="-1"></a>of the underlying embedding model, not a routing or prompting problem.</span>
+<span id="cb1-457"><a href="#cb1-457" aria-hidden="true" tabindex="-1"></a>The 5 questions, one per operation type:</span>
+<span id="cb1-458"><a href="#cb1-458" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-459"><a href="#cb1-459" aria-hidden="true" tabindex="-1"></a><span class="ss">1.  </span>*What percentage of active GLP-1 writers in Texas are currently</span>
+<span id="cb1-460"><a href="#cb1-460" aria-hidden="true" tabindex="-1"></a>    targeted?* - percentage of a group</span>
+<span id="cb1-461"><a href="#cb1-461" aria-hidden="true" tabindex="-1"></a><span class="ss">2.  </span>*What&#39;s the average propensity score for endocrinologists in</span>
+<span id="cb1-462"><a href="#cb1-462" aria-hidden="true" tabindex="-1"></a>    Florida?* - average / mean</span>
+<span id="cb1-463"><a href="#cb1-463" aria-hidden="true" tabindex="-1"></a><span class="ss">3.  </span>*What&#39;s the total monthly script volume across all High-tier Obesity</span>
+<span id="cb1-464"><a href="#cb1-464" aria-hidden="true" tabindex="-1"></a>    Medicine prescribers nationally?* - sum / total</span>
+<span id="cb1-465"><a href="#cb1-465" aria-hidden="true" tabindex="-1"></a><span class="ss">4.  </span>*How many more High-tier HCPs does California have than Texas?* -</span>
+<span id="cb1-466"><a href="#cb1-466" aria-hidden="true" tabindex="-1"></a>    difference between two groups</span>
+<span id="cb1-467"><a href="#cb1-467" aria-hidden="true" tabindex="-1"></a><span class="ss">5.  </span>*Endocrinologists in Florida average a certain number of monthly</span>
+<span id="cb1-468"><a href="#cb1-468" aria-hidden="true" tabindex="-1"></a>    scripts each. If 5 more endocrinologists in Florida started</span>
+<span id="cb1-469"><a href="#cb1-469" aria-hidden="true" tabindex="-1"></a>    prescribing at that same average rate, how many additional monthly</span>
+<span id="cb1-470"><a href="#cb1-470" aria-hidden="true" tabindex="-1"></a>    scripts would that represent?* - compound, multi-step (a rate, then</span>
+<span id="cb1-471"><a href="#cb1-471" aria-hidden="true" tabindex="-1"></a>    multiplied by a given number)</span>
+<span id="cb1-472"><a href="#cb1-472" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-473"><a href="#cb1-473" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning}</span>
+<span id="cb1-474"><a href="#cb1-474" aria-hidden="true" tabindex="-1"></a><span class="fu">### Issues Found</span></span>
 <span id="cb1-475"><a href="#cb1-475" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-476"><a href="#cb1-476" aria-hidden="true" tabindex="-1"></a>This same investigation also caught a bug in <span class="in">`ground_truth.py`</span> itself:</span>
-<span id="cb1-477"><a href="#cb1-477" aria-hidden="true" tabindex="-1"></a>one narrative question&#39;s expected-tag list included ordinary English</span>
-<span id="cb1-478"><a href="#cb1-478" aria-hidden="true" tabindex="-1"></a>words (&quot;persistence&quot;, &quot;discontinue&quot;) that happened to also appear in a</span>
-<span id="cb1-479"><a href="#cb1-479" aria-hidden="true" tabindex="-1"></a>*different*, incorrect chunk&#39;s own text - meaning the check had been</span>
-<span id="cb1-480"><a href="#cb1-480" aria-hidden="true" tabindex="-1"></a>passing for an accidental reason, not the real one, since it was first</span>
-<span id="cb1-481"><a href="#cb1-481" aria-hidden="true" tabindex="-1"></a>written.</span>
-<span id="cb1-482"><a href="#cb1-482" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb1-476"><a href="#cb1-476" aria-hidden="true" tabindex="-1"></a>No issues as of last run.</span>
+<span id="cb1-477"><a href="#cb1-477" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb1-478"><a href="#cb1-478" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-479"><a href="#cb1-479" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-480"><a href="#cb1-480" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
+<span id="cb1-481"><a href="#cb1-481" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-482"><a href="#cb1-482" aria-hidden="true" tabindex="-1"></a>Real run, 2026-07-29:</span>
 <span id="cb1-483"><a href="#cb1-483" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-484"><a href="#cb1-484" aria-hidden="true" tabindex="-1"></a><span class="fu">### The Fix</span></span>
-<span id="cb1-485"><a href="#cb1-485" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-486"><a href="#cb1-486" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The <span class="in">`ground_truth.py`</span> tag bug was tightened to the real, precise chunk</span>
-<span id="cb1-487"><a href="#cb1-487" aria-hidden="true" tabindex="-1"></a>  identifier only, removing the plain-English words that could</span>
-<span id="cb1-488"><a href="#cb1-488" aria-hidden="true" tabindex="-1"></a>  accidentally match the wrong chunk&#39;s body text.</span>
-<span id="cb1-489"><a href="#cb1-489" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>The embedding-model weakness itself was **not** patched - documented</span>
-<span id="cb1-490"><a href="#cb1-490" aria-hidden="true" tabindex="-1"></a>  as a known limitation instead. The real fix (combining keyword search</span>
-<span id="cb1-491"><a href="#cb1-491" aria-hidden="true" tabindex="-1"></a>  with the existing meaning-based search) is a larger piece of work,</span>
-<span id="cb1-492"><a href="#cb1-492" aria-hidden="true" tabindex="-1"></a>  deliberately not undertaken for this showcase.</span>
-<span id="cb1-493"><a href="#cb1-493" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-494"><a href="#cb1-494" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
+<span id="cb1-484"><a href="#cb1-484" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="sc">\#</span>  <span class="pp">|</span> Operation                     <span class="pp">|</span> Result           <span class="pp">|</span></span>
+<span id="cb1-485"><a href="#cb1-485" aria-hidden="true" tabindex="-1"></a><span class="pp">|-----|-------------------------------|------------------|</span></span>
+<span id="cb1-486"><a href="#cb1-486" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> 1   <span class="pp">|</span> Percentage of a group         <span class="pp">|</span> Pass             <span class="pp">|</span></span>
+<span id="cb1-487"><a href="#cb1-487" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> 2   <span class="pp">|</span> Average / mean                <span class="pp">|</span> Pass             <span class="pp">|</span></span>
+<span id="cb1-488"><a href="#cb1-488" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> 3   <span class="pp">|</span> Sum / total                   <span class="pp">|</span> Pass             <span class="pp">|</span></span>
+<span id="cb1-489"><a href="#cb1-489" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> 4   <span class="pp">|</span> Difference between two groups <span class="pp">|</span> Pass             <span class="pp">|</span></span>
+<span id="cb1-490"><a href="#cb1-490" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> 5   <span class="pp">|</span> Compound multi-step           <span class="pp">|</span> Pass             <span class="pp">|</span></span>
+<span id="cb1-491"><a href="#cb1-491" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-492"><a href="#cb1-492" aria-hidden="true" tabindex="-1"></a>5 / 5, all independently cross-checked against the actual uploaded</span>
+<span id="cb1-493"><a href="#cb1-493" aria-hidden="true" tabindex="-1"></a>spreadsheet rather than trusting the eval&#39;s own internal computation.</span>
+<span id="cb1-494"><a href="#cb1-494" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-495"><a href="#cb1-495" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-496"><a href="#cb1-496" aria-hidden="true" tabindex="-1"></a>Real embedding model, 2026-07-28:</span>
+<span id="cb1-496"><a href="#cb1-496" aria-hidden="true" tabindex="-1"></a><span class="fu">## Article retrieval ranking</span></span>
 <span id="cb1-497"><a href="#cb1-497" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-498"><a href="#cb1-498" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Outcome                                  <span class="pp">|</span> Questions <span class="pp">|</span></span>
-<span id="cb1-499"><a href="#cb1-499" aria-hidden="true" tabindex="-1"></a><span class="pp">|------------------------------------------|-----------|</span></span>
-<span id="cb1-500"><a href="#cb1-500" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk ranked #1                  <span class="pp">|</span> 6 / 10    <span class="pp">|</span></span>
-<span id="cb1-501"><a href="#cb1-501" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk present, but not ranked #1 <span class="pp">|</span> 3 / 10    <span class="pp">|</span></span>
-<span id="cb1-502"><a href="#cb1-502" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk missing entirely           <span class="pp">|</span> 1 / 10    <span class="pp">|</span></span>
-<span id="cb1-503"><a href="#cb1-503" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-504"><a href="#cb1-504" aria-hidden="true" tabindex="-1"></a>**This is a known limitation, not a bug to fix.** The 4/10 questions</span>
-<span id="cb1-505"><a href="#cb1-505" aria-hidden="true" tabindex="-1"></a>that didn&#39;t rank correctly are a property of the underlying embedding</span>
-<span id="cb1-506"><a href="#cb1-506" aria-hidden="true" tabindex="-1"></a>model (<span class="in">`all-MiniLM-L6-v2`</span>) itself, confirmed on both Path A and Path B -</span>
-<span id="cb1-507"><a href="#cb1-507" aria-hidden="true" tabindex="-1"></a>not something a prompt change or eval fix can resolve. The real fix</span>
-<span id="cb1-508"><a href="#cb1-508" aria-hidden="true" tabindex="-1"></a>(hybrid keyword + semantic search) is a larger piece of work,</span>
-<span id="cb1-509"><a href="#cb1-509" aria-hidden="true" tabindex="-1"></a>deliberately not undertaken for this showcase.</span>
-<span id="cb1-510"><a href="#cb1-510" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-511"><a href="#cb1-511" aria-hidden="true" tabindex="-1"></a><span class="fu">## Numeric / arithmetic accuracy</span></span>
-<span id="cb1-512"><a href="#cb1-512" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-513"><a href="#cb1-513" aria-hidden="true" tabindex="-1"></a>Everything above checks whether the system finds the *right data*. This</span>
-<span id="cb1-514"><a href="#cb1-514" aria-hidden="true" tabindex="-1"></a>checks whether, when the agent has to do its own arithmetic on top of</span>
-<span id="cb1-515"><a href="#cb1-515" aria-hidden="true" tabindex="-1"></a>that data - a percentage, an average, a sum, a difference between two</span>
-<span id="cb1-516"><a href="#cb1-516" aria-hidden="true" tabindex="-1"></a>groups, a compound calculation - the maths itself is correct. Five</span>
-<span id="cb1-517"><a href="#cb1-517" aria-hidden="true" tabindex="-1"></a>genuinely different operations are tested (not the same operation</span>
-<span id="cb1-518"><a href="#cb1-518" aria-hidden="true" tabindex="-1"></a>repeated with different filters), each against a live, full-precision</span>
-<span id="cb1-519"><a href="#cb1-519" aria-hidden="true" tabindex="-1"></a>ground truth computed directly from the dataframe, with no rounding</span>
-<span id="cb1-520"><a href="#cb1-520" aria-hidden="true" tabindex="-1"></a>tolerance: whatever precision the agent&#39;s own answer uses, the true</span>
-<span id="cb1-521"><a href="#cb1-521" aria-hidden="true" tabindex="-1"></a>value rounded to that same precision must match exactly.</span>
-<span id="cb1-522"><a href="#cb1-522" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-523"><a href="#cb1-523" aria-hidden="true" tabindex="-1"></a>The 5 questions, one per operation type:</span>
-<span id="cb1-524"><a href="#cb1-524" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-525"><a href="#cb1-525" aria-hidden="true" tabindex="-1"></a><span class="ss">1.  </span>*What percentage of active GLP-1 writers in Texas are currently</span>
-<span id="cb1-526"><a href="#cb1-526" aria-hidden="true" tabindex="-1"></a>    targeted?* - percentage of a group</span>
-<span id="cb1-527"><a href="#cb1-527" aria-hidden="true" tabindex="-1"></a><span class="ss">2.  </span>*What&#39;s the average propensity score for endocrinologists in</span>
-<span id="cb1-528"><a href="#cb1-528" aria-hidden="true" tabindex="-1"></a>    Florida?* - average / mean</span>
-<span id="cb1-529"><a href="#cb1-529" aria-hidden="true" tabindex="-1"></a><span class="ss">3.  </span>*What&#39;s the total monthly script volume across all High-tier Obesity</span>
-<span id="cb1-530"><a href="#cb1-530" aria-hidden="true" tabindex="-1"></a>    Medicine prescribers nationally?* - sum / total</span>
-<span id="cb1-531"><a href="#cb1-531" aria-hidden="true" tabindex="-1"></a><span class="ss">4.  </span>*How many more High-tier HCPs does California have than Texas?* -</span>
-<span id="cb1-532"><a href="#cb1-532" aria-hidden="true" tabindex="-1"></a>    difference between two groups</span>
-<span id="cb1-533"><a href="#cb1-533" aria-hidden="true" tabindex="-1"></a><span class="ss">5.  </span>*Endocrinologists in Florida average a certain number of monthly</span>
-<span id="cb1-534"><a href="#cb1-534" aria-hidden="true" tabindex="-1"></a>    scripts each. If 5 more endocrinologists in Florida started</span>
-<span id="cb1-535"><a href="#cb1-535" aria-hidden="true" tabindex="-1"></a>    prescribing at that same average rate, how many additional monthly</span>
-<span id="cb1-536"><a href="#cb1-536" aria-hidden="true" tabindex="-1"></a>    scripts would that represent?* - compound, multi-step (a rate, then</span>
-<span id="cb1-537"><a href="#cb1-537" aria-hidden="true" tabindex="-1"></a>    multiplied by a given number)</span>
-<span id="cb1-538"><a href="#cb1-538" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-539"><a href="#cb1-539" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning}</span>
-<span id="cb1-540"><a href="#cb1-540" aria-hidden="true" tabindex="-1"></a><span class="fu">### Issues Found</span></span>
-<span id="cb1-541"><a href="#cb1-541" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-542"><a href="#cb1-542" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Question 1 (Texas percentage) - a tool capability gap, then a wrong</span>
-<span id="cb1-543"><a href="#cb1-543" aria-hidden="true" tabindex="-1"></a>  denominator.** Questions asking for a true average or percentage</span>
-<span id="cb1-544"><a href="#cb1-544" aria-hidden="true" tabindex="-1"></a>  across a large group used to force the agent to either guess from a</span>
-<span id="cb1-545"><a href="#cb1-545" aria-hidden="true" tabindex="-1"></a>  capped, biased 25-row sample, or - more often, correctly</span>
-<span id="cb1-546"><a href="#cb1-546" aria-hidden="true" tabindex="-1"></a><span class="ss">  - </span>refuse to answer at all, since no tool could compute a real</span>
-<span id="cb1-547"><a href="#cb1-547" aria-hidden="true" tabindex="-1"></a>    statistic over an arbitrarily large group. Once a new tool</span>
-<span id="cb1-548"><a href="#cb1-548" aria-hidden="true" tabindex="-1"></a>    (<span class="in">`aggregate_hcp_stats`</span>) was added to solve that, a second, more</span>
-<span id="cb1-549"><a href="#cb1-549" aria-hidden="true" tabindex="-1"></a>    specific bug appeared: the tool had no way to express &quot;active only&quot;,</span>
-<span id="cb1-550"><a href="#cb1-550" aria-hidden="true" tabindex="-1"></a>    so a question about *active* writers in Texas was quietly computed</span>
-<span id="cb1-551"><a href="#cb1-551" aria-hidden="true" tabindex="-1"></a>    over *all* writers (including non-prescribing ones) - 228 targeted</span>
-<span id="cb1-552"><a href="#cb1-552" aria-hidden="true" tabindex="-1"></a>    writers reported as 226.</span>
-<span id="cb1-553"><a href="#cb1-553" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Question 2 (Florida average) - a rounding bug in the eval itself,</span>
-<span id="cb1-554"><a href="#cb1-554" aria-hidden="true" tabindex="-1"></a>  not the agent.** A genuinely correct answer (0.355) was marked as</span>
-<span id="cb1-555"><a href="#cb1-555" aria-hidden="true" tabindex="-1"></a>  failing because <span class="in">`ground_truth.py`</span>&#39;s own rounding to one decimal place</span>
-<span id="cb1-556"><a href="#cb1-556" aria-hidden="true" tabindex="-1"></a>  was too coarse for a 0-1 scale metric.</span>
-<span id="cb1-557"><a href="#cb1-557" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Questions 3, 4 and 5 (sum, difference, compound)** - no issues</span>
-<span id="cb1-558"><a href="#cb1-558" aria-hidden="true" tabindex="-1"></a>  found; each passed against live ground truth on the first real run.</span>
-<span id="cb1-559"><a href="#cb1-559" aria-hidden="true" tabindex="-1"></a>:::</span>
-<span id="cb1-560"><a href="#cb1-560" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-561"><a href="#cb1-561" aria-hidden="true" tabindex="-1"></a><span class="fu">### The Fix</span></span>
+<span id="cb1-498"><a href="#cb1-498" aria-hidden="true" tabindex="-1"></a>The two evaluations below are different from the three above in one</span>
+<span id="cb1-499"><a href="#cb1-499" aria-hidden="true" tabindex="-1"></a>respect: instead of running against the simulated documents used</span>
+<span id="cb1-500"><a href="#cb1-500" aria-hidden="true" tabindex="-1"></a>everywhere else on this page, real, published journal articles were</span>
+<span id="cb1-501"><a href="#cb1-501" aria-hidden="true" tabindex="-1"></a>ingested and chunked through the exact same Layer 1 pipeline as every</span>
+<span id="cb1-502"><a href="#cb1-502" aria-hidden="true" tabindex="-1"></a>other document - no special handling, no simplified formatting - then</span>
+<span id="cb1-503"><a href="#cb1-503" aria-hidden="true" tabindex="-1"></a>tested with the exact same three-layer method used everywhere else. The</span>
+<span id="cb1-504"><a href="#cb1-504" aria-hidden="true" tabindex="-1"></a>point is to check the system against genuine, unsimplified information</span>
+<span id="cb1-505"><a href="#cb1-505" aria-hidden="true" tabindex="-1"></a>rather than content written to be easy to retrieve. That also makes it a</span>
+<span id="cb1-506"><a href="#cb1-506" aria-hidden="true" tabindex="-1"></a>genuinely harder test: real papers carry more nuance, and Claude may</span>
+<span id="cb1-507"><a href="#cb1-507" aria-hidden="true" tabindex="-1"></a>already know some of their contents from pretraining, a complication</span>
+<span id="cb1-508"><a href="#cb1-508" aria-hidden="true" tabindex="-1"></a>that doesn&#39;t exist for the simulated documents.</span>
+<span id="cb1-509"><a href="#cb1-509" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-510"><a href="#cb1-510" aria-hidden="true" tabindex="-1"></a><span class="in">`article_ground_truth.py`</span> finds each fact&#39;s source chunk by searching</span>
+<span id="cb1-511"><a href="#cb1-511" aria-hidden="true" tabindex="-1"></a>for a distinctive substring live against the real chunked text, the same</span>
+<span id="cb1-512"><a href="#cb1-512" aria-hidden="true" tabindex="-1"></a>live-lookup principle as <span class="in">`ground_truth.py`</span>. One question,</span>
+<span id="cb1-513"><a href="#cb1-513" aria-hidden="true" tabindex="-1"></a><span class="in">`receptor_location_meier`</span>, is a deliberate trap: Cooper &amp; van Raalte&#39;s</span>
+<span id="cb1-514"><a href="#cb1-514" aria-hidden="true" tabindex="-1"></a>paper says the GLP-1 receptor is mainly expressed in the kidney&#39;s</span>
+<span id="cb1-515"><a href="#cb1-515" aria-hidden="true" tabindex="-1"></a>juxtaglomerular cells; Meier et al.&#39;s paper says proximal tubular</span>
+<span id="cb1-516"><a href="#cb1-516" aria-hidden="true" tabindex="-1"></a>cells - two real papers making different specific claims about the same</span>
+<span id="cb1-517"><a href="#cb1-517" aria-hidden="true" tabindex="-1"></a>general topic. The question asks specifically what Meier says, testing</span>
+<span id="cb1-518"><a href="#cb1-518" aria-hidden="true" tabindex="-1"></a>whether retrieval and synthesis correctly attribute the claim to the</span>
+<span id="cb1-519"><a href="#cb1-519" aria-hidden="true" tabindex="-1"></a>right paper rather than blending the two.</span>
+<span id="cb1-520"><a href="#cb1-520" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-521"><a href="#cb1-521" aria-hidden="true" tabindex="-1"></a><span class="in">`test_article_retrieval.py`</span> calls the real search engine directly (free,</span>
+<span id="cb1-522"><a href="#cb1-522" aria-hidden="true" tabindex="-1"></a>no LLM) and checks whether each question&#39;s correct chunk ranks first -</span>
+<span id="cb1-523"><a href="#cb1-523" aria-hidden="true" tabindex="-1"></a>searching the **full corpus**, every document type, not a pre-filtered</span>
+<span id="cb1-524"><a href="#cb1-524" aria-hidden="true" tabindex="-1"></a>article-only subset, so retrieval competes against the same real noise a</span>
+<span id="cb1-525"><a href="#cb1-525" aria-hidden="true" tabindex="-1"></a>rep&#39;s actual question would.</span>
+<span id="cb1-526"><a href="#cb1-526" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-527"><a href="#cb1-527" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning}</span>
+<span id="cb1-528"><a href="#cb1-528" aria-hidden="true" tabindex="-1"></a><span class="fu">### Issues Found</span></span>
+<span id="cb1-529"><a href="#cb1-529" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-530"><a href="#cb1-530" aria-hidden="true" tabindex="-1"></a>Real run, 2026-08-14 (BM25 + reranker in place) - 5 of 12 questions still</span>
+<span id="cb1-531"><a href="#cb1-531" aria-hidden="true" tabindex="-1"></a>have a retrieval or coverage issue:</span>
+<span id="cb1-532"><a href="#cb1-532" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-533"><a href="#cb1-533" aria-hidden="true" tabindex="-1"></a>Not major issues:</span>
+<span id="cb1-534"><a href="#cb1-534" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-535"><a href="#cb1-535" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`chen_pooled_or`** - *&quot;What was the pooled odds ratio for composite</span>
+<span id="cb1-536"><a href="#cb1-536" aria-hidden="true" tabindex="-1"></a>  kidney outcome in Chen et al.&#39;s meta-analysis?&quot;* - retrieval issue:</span>
+<span id="cb1-537"><a href="#cb1-537" aria-hidden="true" tabindex="-1"></a>  correct chunk present, but ranked #3, not #1.</span>
+<span id="cb1-538"><a href="#cb1-538" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`chen_patient_count`** - *&quot;How many patients did Chen et al. include</span>
+<span id="cb1-539"><a href="#cb1-539" aria-hidden="true" tabindex="-1"></a>  with baseline eGFR under 60?&quot;* - retrieval issue: correct chunk</span>
+<span id="cb1-540"><a href="#cb1-540" aria-hidden="true" tabindex="-1"></a>  present, but ranked #2, not #1.</span>
+<span id="cb1-541"><a href="#cb1-541" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`chen_sensitivity_or`** - *&quot;What did excluding exendin-4-backbone</span>
+<span id="cb1-542"><a href="#cb1-542" aria-hidden="true" tabindex="-1"></a>  agents do to the kidney-outcome odds ratio, per Chen et al.?&quot;* -</span>
+<span id="cb1-543"><a href="#cb1-543" aria-hidden="true" tabindex="-1"></a>  retrieval issue: correct chunk present, but ranked #3, not #1. (All</span>
+<span id="cb1-544"><a href="#cb1-544" aria-hidden="true" tabindex="-1"></a>  three Chen et al. questions rank present-but-not-#1 - that paper&#39;s</span>
+<span id="cb1-545"><a href="#cb1-545" aria-hidden="true" tabindex="-1"></a>  chunks appear to rank systematically lower than the other two papers&#39;,</span>
+<span id="cb1-546"><a href="#cb1-546" aria-hidden="true" tabindex="-1"></a>  worth watching.)</span>
+<span id="cb1-547"><a href="#cb1-547" aria-hidden="true" tabindex="-1"></a>  </span>
+<span id="cb1-548"><a href="#cb1-548" aria-hidden="true" tabindex="-1"></a>Major issues:</span>
+<span id="cb1-549"><a href="#cb1-549" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-550"><a href="#cb1-550" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`diabetic_vs_nondiabetic_evidence`** (synthesis) - *&quot;Across Cooper,</span>
+<span id="cb1-551"><a href="#cb1-551" aria-hidden="true" tabindex="-1"></a>  Meier, and Chen, is the kidney-protective benefit of GLP-1 receptor</span>
+<span id="cb1-552"><a href="#cb1-552" aria-hidden="true" tabindex="-1"></a>  agonists more established in patients with diabetes or without</span>
+<span id="cb1-553"><a href="#cb1-553" aria-hidden="true" tabindex="-1"></a>  diabetes?&quot;* - synthesis coverage issue: only 1 of the 3 required</span>
+<span id="cb1-554"><a href="#cb1-554" aria-hidden="true" tabindex="-1"></a>  source papers (Meier) shows up in the results; Cooper and Chen are</span>
+<span id="cb1-555"><a href="#cb1-555" aria-hidden="true" tabindex="-1"></a>  both missing.</span>
+<span id="cb1-556"><a href="#cb1-556" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`dominant_evidence_population`** (synthesis) - *&quot;What population</span>
+<span id="cb1-557"><a href="#cb1-557" aria-hidden="true" tabindex="-1"></a>  does most current GLP-1 receptor agonist clinical trial evidence for</span>
+<span id="cb1-558"><a href="#cb1-558" aria-hidden="true" tabindex="-1"></a>  kidney outcomes focus on, according to these three papers?&quot;* -</span>
+<span id="cb1-559"><a href="#cb1-559" aria-hidden="true" tabindex="-1"></a>  synthesis coverage issue: none of the 3 required source papers show up</span>
+<span id="cb1-560"><a href="#cb1-560" aria-hidden="true" tabindex="-1"></a>  in the results.</span>
+<span id="cb1-561"><a href="#cb1-561" aria-hidden="true" tabindex="-1"></a>:::</span>
 <span id="cb1-562"><a href="#cb1-562" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-563"><a href="#cb1-563" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Added the <span class="in">`aggregate_hcp_stats`</span> tool, which computes a real statistic</span>
-<span id="cb1-564"><a href="#cb1-564" aria-hidden="true" tabindex="-1"></a>  directly over every matching row, not a capped sample.</span>
-<span id="cb1-565"><a href="#cb1-565" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Added an explicit <span class="in">`active_only`</span> parameter to that tool, and made the</span>
-<span id="cb1-566"><a href="#cb1-566" aria-hidden="true" tabindex="-1"></a>  system prompt treat the word &quot;active&quot; as a mandatory checklist item to</span>
-<span id="cb1-567"><a href="#cb1-567" aria-hidden="true" tabindex="-1"></a>  check before every relevant tool call.</span>
-<span id="cb1-568"><a href="#cb1-568" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Fixed <span class="in">`ground_truth.py`</span> to report full, unrounded precision, and</span>
-<span id="cb1-569"><a href="#cb1-569" aria-hidden="true" tabindex="-1"></a>  changed the check to compare at whatever precision the agent&#39;s own</span>
-<span id="cb1-570"><a href="#cb1-570" aria-hidden="true" tabindex="-1"></a>  answer actually used, rather than a fixed, overly-coarse rounding.</span>
-<span id="cb1-571"><a href="#cb1-571" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-572"><a href="#cb1-572" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
+<span id="cb1-563"><a href="#cb1-563" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-564"><a href="#cb1-564" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
+<span id="cb1-565"><a href="#cb1-565" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-566"><a href="#cb1-566" aria-hidden="true" tabindex="-1"></a>Real run, 2026-08-03:</span>
+<span id="cb1-567"><a href="#cb1-567" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-568"><a href="#cb1-568" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Outcome <span class="pp">|</span> Single-source (10) <span class="pp">|</span> Synthesis (2) <span class="pp">|</span></span>
+<span id="cb1-569"><a href="#cb1-569" aria-hidden="true" tabindex="-1"></a><span class="pp">|----|----|----|</span></span>
+<span id="cb1-570"><a href="#cb1-570" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk ranked #1 <span class="pp">|</span> 4 <span class="pp">|</span> <span class="sc">\-</span> <span class="pp">|</span></span>
+<span id="cb1-571"><a href="#cb1-571" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk present, not #1 <span class="pp">|</span> 4 <span class="pp">|</span> 1 partial (1 of 3 source docs) <span class="pp">|</span></span>
+<span id="cb1-572"><a href="#cb1-572" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk missing entirely <span class="pp">|</span> 2 <span class="pp">|</span> 1 (0 of 3 source docs) <span class="pp">|</span></span>
 <span id="cb1-573"><a href="#cb1-573" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-574"><a href="#cb1-574" aria-hidden="true" tabindex="-1"></a>Real run, verified independently against the raw spreadsheet:</span>
+<span id="cb1-574"><a href="#cb1-574" aria-hidden="true" tabindex="-1"></a>Real run, after BM25 and reranking, 2026-08-14:</span>
 <span id="cb1-575"><a href="#cb1-575" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-576"><a href="#cb1-576" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> <span class="sc">\#</span>  <span class="pp">|</span> Operation                     <span class="pp">|</span> Result           <span class="pp">|</span></span>
-<span id="cb1-577"><a href="#cb1-577" aria-hidden="true" tabindex="-1"></a><span class="pp">|-----|-------------------------------|------------------|</span></span>
-<span id="cb1-578"><a href="#cb1-578" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> 1   <span class="pp">|</span> Percentage of a group         <span class="pp">|</span> Pass (after fix) <span class="pp">|</span></span>
-<span id="cb1-579"><a href="#cb1-579" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> 2   <span class="pp">|</span> Average / mean                <span class="pp">|</span> Pass (after fix) <span class="pp">|</span></span>
-<span id="cb1-580"><a href="#cb1-580" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> 3   <span class="pp">|</span> Sum / total                   <span class="pp">|</span> Pass             <span class="pp">|</span></span>
-<span id="cb1-581"><a href="#cb1-581" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> 4   <span class="pp">|</span> Difference between two groups <span class="pp">|</span> Pass             <span class="pp">|</span></span>
-<span id="cb1-582"><a href="#cb1-582" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> 5   <span class="pp">|</span> Compound multi-step           <span class="pp">|</span> Pass             <span class="pp">|</span></span>
-<span id="cb1-583"><a href="#cb1-583" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-584"><a href="#cb1-584" aria-hidden="true" tabindex="-1"></a>5 / 5, all independently cross-checked against the actual uploaded</span>
-<span id="cb1-585"><a href="#cb1-585" aria-hidden="true" tabindex="-1"></a>spreadsheet rather than trusting the eval&#39;s own internal computation.</span>
-<span id="cb1-586"><a href="#cb1-586" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-587"><a href="#cb1-587" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-588"><a href="#cb1-588" aria-hidden="true" tabindex="-1"></a><span class="fu">## Article retrieval ranking</span></span>
-<span id="cb1-589"><a href="#cb1-589" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-590"><a href="#cb1-590" aria-hidden="true" tabindex="-1"></a>The two evaluations below are different from the three above in one</span>
-<span id="cb1-591"><a href="#cb1-591" aria-hidden="true" tabindex="-1"></a>respect: instead of running against the simulated documents used</span>
-<span id="cb1-592"><a href="#cb1-592" aria-hidden="true" tabindex="-1"></a>everywhere else on this page, real, published journal articles were</span>
-<span id="cb1-593"><a href="#cb1-593" aria-hidden="true" tabindex="-1"></a>ingested and chunked through the exact same Layer 1 pipeline as every</span>
-<span id="cb1-594"><a href="#cb1-594" aria-hidden="true" tabindex="-1"></a>other document - no special handling, no simplified formatting - then</span>
-<span id="cb1-595"><a href="#cb1-595" aria-hidden="true" tabindex="-1"></a>tested with the exact same three-layer method used everywhere else. The</span>
-<span id="cb1-596"><a href="#cb1-596" aria-hidden="true" tabindex="-1"></a>point is to check the system against genuine, unsimplified information</span>
-<span id="cb1-597"><a href="#cb1-597" aria-hidden="true" tabindex="-1"></a>rather than content written to be easy to retrieve. That also makes it a</span>
-<span id="cb1-598"><a href="#cb1-598" aria-hidden="true" tabindex="-1"></a>genuinely harder test: real papers carry more nuance, and Claude may</span>
-<span id="cb1-599"><a href="#cb1-599" aria-hidden="true" tabindex="-1"></a>already know some of their contents from pretraining, a complication</span>
-<span id="cb1-600"><a href="#cb1-600" aria-hidden="true" tabindex="-1"></a>that doesn&#39;t exist for the simulated documents.</span>
-<span id="cb1-601"><a href="#cb1-601" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-602"><a href="#cb1-602" aria-hidden="true" tabindex="-1"></a><span class="in">`article_ground_truth.py`</span> finds each fact&#39;s source chunk by searching</span>
-<span id="cb1-603"><a href="#cb1-603" aria-hidden="true" tabindex="-1"></a>for a distinctive substring live against the real chunked text, the same</span>
-<span id="cb1-604"><a href="#cb1-604" aria-hidden="true" tabindex="-1"></a>live-lookup principle as <span class="in">`ground_truth.py`</span>. One question,</span>
-<span id="cb1-605"><a href="#cb1-605" aria-hidden="true" tabindex="-1"></a><span class="in">`receptor_location_meier`</span>, is a deliberate trap: Cooper &amp; van Raalte&#39;s</span>
-<span id="cb1-606"><a href="#cb1-606" aria-hidden="true" tabindex="-1"></a>paper says the GLP-1 receptor is mainly expressed in the kidney&#39;s</span>
-<span id="cb1-607"><a href="#cb1-607" aria-hidden="true" tabindex="-1"></a>juxtaglomerular cells; Meier et al.&#39;s paper says proximal tubular</span>
-<span id="cb1-608"><a href="#cb1-608" aria-hidden="true" tabindex="-1"></a>cells - two real papers making different specific claims about the same</span>
-<span id="cb1-609"><a href="#cb1-609" aria-hidden="true" tabindex="-1"></a>general topic. The question asks specifically what Meier says, testing</span>
-<span id="cb1-610"><a href="#cb1-610" aria-hidden="true" tabindex="-1"></a>whether retrieval and synthesis correctly attribute the claim to the</span>
-<span id="cb1-611"><a href="#cb1-611" aria-hidden="true" tabindex="-1"></a>right paper rather than blending the two.</span>
-<span id="cb1-612"><a href="#cb1-612" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-613"><a href="#cb1-613" aria-hidden="true" tabindex="-1"></a><span class="in">`test_article_retrieval.py`</span> calls the real search engine directly (free,</span>
-<span id="cb1-614"><a href="#cb1-614" aria-hidden="true" tabindex="-1"></a>no LLM) and checks whether each question&#39;s correct chunk ranks first -</span>
-<span id="cb1-615"><a href="#cb1-615" aria-hidden="true" tabindex="-1"></a>searching the **full corpus**, every document type, not a pre-filtered</span>
-<span id="cb1-616"><a href="#cb1-616" aria-hidden="true" tabindex="-1"></a>article-only subset, so retrieval competes against the same real noise a</span>
-<span id="cb1-617"><a href="#cb1-617" aria-hidden="true" tabindex="-1"></a>rep&#39;s actual question would.</span>
-<span id="cb1-618"><a href="#cb1-618" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-619"><a href="#cb1-619" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
-<span id="cb1-620"><a href="#cb1-620" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-621"><a href="#cb1-621" aria-hidden="true" tabindex="-1"></a>Real run, 2026-08-03:</span>
-<span id="cb1-622"><a href="#cb1-622" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-623"><a href="#cb1-623" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Outcome <span class="pp">|</span> Single-source (10) <span class="pp">|</span> Synthesis (2) <span class="pp">|</span></span>
-<span id="cb1-624"><a href="#cb1-624" aria-hidden="true" tabindex="-1"></a><span class="pp">|----|----|----|</span></span>
-<span id="cb1-625"><a href="#cb1-625" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk ranked #1 <span class="pp">|</span> 4 <span class="pp">|</span> <span class="sc">\-</span> <span class="pp">|</span></span>
-<span id="cb1-626"><a href="#cb1-626" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk present, not #1 <span class="pp">|</span> 4 <span class="pp">|</span> 1 partial (1 of 3 source docs) <span class="pp">|</span></span>
-<span id="cb1-627"><a href="#cb1-627" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk missing entirely <span class="pp">|</span> 2 <span class="pp">|</span> 1 (0 of 3 source docs) <span class="pp">|</span></span>
-<span id="cb1-628"><a href="#cb1-628" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-629"><a href="#cb1-629" aria-hidden="true" tabindex="-1"></a>Two questions (<span class="in">`chen_pooled_or`</span>, <span class="in">`chen_sensitivity_or`</span>) never retrieved</span>
-<span id="cb1-630"><a href="#cb1-630" aria-hidden="true" tabindex="-1"></a>their correct chunk at all - both from the same source paper (Chen et</span>
-<span id="cb1-631"><a href="#cb1-631" aria-hidden="true" tabindex="-1"></a>al.&#39;s meta-analysis), suggesting that paper&#39;s chunks may be</span>
-<span id="cb1-632"><a href="#cb1-632" aria-hidden="true" tabindex="-1"></a>systematically under-ranked rather than two unrelated misses.</span>
-<span id="cb1-633"><a href="#cb1-633" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-634"><a href="#cb1-634" aria-hidden="true" tabindex="-1"></a>Issues are discussed in further detail below.</span>
-<span id="cb1-635"><a href="#cb1-635" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-636"><a href="#cb1-636" aria-hidden="true" tabindex="-1"></a><span class="fu">## Article agent evaluation</span></span>
-<span id="cb1-637"><a href="#cb1-637" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-638"><a href="#cb1-638" aria-hidden="true" tabindex="-1"></a><span class="in">`test_the_articles.py`</span> runs the same questions through the real agent,</span>
-<span id="cb1-639"><a href="#cb1-639" aria-hidden="true" tabindex="-1"></a>three layers, the same matching method as <span class="in">`test_the_agent.py`</span> (a</span>
-<span id="cb1-640"><a href="#cb1-640" aria-hidden="true" tabindex="-1"></a>haystack substring search over the stringified evidence, not structural</span>
-<span id="cb1-641"><a href="#cb1-641" aria-hidden="true" tabindex="-1"></a>parsing of the tool result&#39;s exact shape).</span>
-<span id="cb1-642"><a href="#cb1-642" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-643"><a href="#cb1-643" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning}</span>
-<span id="cb1-644"><a href="#cb1-644" aria-hidden="true" tabindex="-1"></a><span class="fu">### Issues Found</span></span>
-<span id="cb1-645"><a href="#cb1-645" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-646"><a href="#cb1-646" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**<span class="in">`receptor_location_meier`</span> - the deliberate cross-document trap -</span>
-<span id="cb1-647"><a href="#cb1-647" aria-hidden="true" tabindex="-1"></a>  failed outright** in this run: wrong chunk retrieved (Layer 2 FAIL)</span>
-<span id="cb1-648"><a href="#cb1-648" aria-hidden="true" tabindex="-1"></a>  and the final answer got the paper&#39;s claim wrong too (Layer 3 FAIL).</span>
-<span id="cb1-649"><a href="#cb1-649" aria-hidden="true" tabindex="-1"></a>  This is the one question on this page specifically designed to test</span>
-<span id="cb1-650"><a href="#cb1-650" aria-hidden="true" tabindex="-1"></a>  claim-to-paper attribution, and in this run it didn&#39;t hold up.</span>
-<span id="cb1-651"><a href="#cb1-651" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Two pretraining-recall flags** (<span class="in">`discontinuation_rate`</span>,</span>
-<span id="cb1-652"><a href="#cb1-652" aria-hidden="true" tabindex="-1"></a>  <span class="in">`dominant_evidence_population`</span>): both failed Layer 2 (wrong or missing</span>
-<span id="cb1-653"><a href="#cb1-653" aria-hidden="true" tabindex="-1"></a>  retrieval) but passed Layer 3 (correct final answer) anyway. For the</span>
-<span id="cb1-654"><a href="#cb1-654" aria-hidden="true" tabindex="-1"></a>  simulated documents elsewhere on this page that would be an</span>
-<span id="cb1-655"><a href="#cb1-655" aria-hidden="true" tabindex="-1"></a>  unambiguous win - correct synthesis despite imperfect retrieval. For</span>
-<span id="cb1-656"><a href="#cb1-656" aria-hidden="true" tabindex="-1"></a>  real, published papers it&#39;s genuinely ambiguous: it could mean the</span>
-<span id="cb1-657"><a href="#cb1-657" aria-hidden="true" tabindex="-1"></a>  same thing, or it could mean Claude already knew the fact from</span>
-<span id="cb1-658"><a href="#cb1-658" aria-hidden="true" tabindex="-1"></a>  training data and never needed retrieval at all, which says nothing</span>
-<span id="cb1-659"><a href="#cb1-659" aria-hidden="true" tabindex="-1"></a>  about whether this system&#39;s pipeline actually works. Neither has been</span>
-<span id="cb1-660"><a href="#cb1-660" aria-hidden="true" tabindex="-1"></a>  re-checked in a fresh, tool-less conversation yet to rule that out.</span>
-<span id="cb1-661"><a href="#cb1-661" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`chen_patient_count` - retrieval succeeded, the answer didn&#39;t.**</span>
-<span id="cb1-662"><a href="#cb1-662" aria-hidden="true" tabindex="-1"></a>  Layer 2 passed (correct chunk retrieved) but Layer 3 failed - a</span>
-<span id="cb1-663"><a href="#cb1-663" aria-hidden="true" tabindex="-1"></a>  genuine synthesis issue, distinct from every retrieval-driven failure</span>
-<span id="cb1-664"><a href="#cb1-664" aria-hidden="true" tabindex="-1"></a>  above.</span>
-<span id="cb1-665"><a href="#cb1-665" aria-hidden="true" tabindex="-1"></a>:::</span>
-<span id="cb1-666"><a href="#cb1-666" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-667"><a href="#cb1-667" aria-hidden="true" tabindex="-1"></a><span class="fu">### The Fix</span></span>
-<span id="cb1-668"><a href="#cb1-668" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-669"><a href="#cb1-669" aria-hidden="true" tabindex="-1"></a>Not patched, and not being treated as urgent. Most of what this track</span>
-<span id="cb1-670"><a href="#cb1-670" aria-hidden="true" tabindex="-1"></a>found traces back to the same cause flagged in the retrieval ranking</span>
-<span id="cb1-671"><a href="#cb1-671" aria-hidden="true" tabindex="-1"></a>section above - retrieval, not synthesis - and the results were solid</span>
-<span id="cb1-672"><a href="#cb1-672" aria-hidden="true" tabindex="-1"></a>enough to leave as-is for now rather than rush a fix. The real next</span>
-<span id="cb1-673"><a href="#cb1-673" aria-hidden="true" tabindex="-1"></a>step here is the same one already flagged there: combining keyword</span>
-<span id="cb1-674"><a href="#cb1-674" aria-hidden="true" tabindex="-1"></a>search with the existing semantic search, so retrieval doesn&#39;t rely on</span>
-<span id="cb1-675"><a href="#cb1-675" aria-hidden="true" tabindex="-1"></a>the embedding model alone. That&#39;s a larger piece of work, deliberately</span>
-<span id="cb1-676"><a href="#cb1-676" aria-hidden="true" tabindex="-1"></a>shelved for this showcase rather than pursued.</span>
+<span id="cb1-576"><a href="#cb1-576" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Outcome <span class="pp">|</span> Single-source (10) <span class="pp">|</span> Synthesis (2) <span class="pp">|</span></span>
+<span id="cb1-577"><a href="#cb1-577" aria-hidden="true" tabindex="-1"></a><span class="pp">|----|----|----|</span></span>
+<span id="cb1-578"><a href="#cb1-578" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk ranked #1 <span class="pp">|</span> 7 <span class="pp">|</span> <span class="sc">\-</span> <span class="pp">|</span></span>
+<span id="cb1-579"><a href="#cb1-579" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk present, not #1 <span class="pp">|</span> 3 <span class="pp">|</span> 1 partial (1 of 3 source docs) <span class="pp">|</span></span>
+<span id="cb1-580"><a href="#cb1-580" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Correct chunk missing entirely <span class="pp">|</span> 0 <span class="pp">|</span> 1 (0 of 3 source docs) <span class="pp">|</span></span>
+<span id="cb1-581"><a href="#cb1-581" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-582"><a href="#cb1-582" aria-hidden="true" tabindex="-1"></a>A real, measurable improvement on the single-source questions: 3 more</span>
+<span id="cb1-583"><a href="#cb1-583" aria-hidden="true" tabindex="-1"></a>now rank their correct chunk first (4/10 -&gt; 7/10), and no single-source</span>
+<span id="cb1-584"><a href="#cb1-584" aria-hidden="true" tabindex="-1"></a>question is missing its correct chunk entirely any more (2/10 -&gt; 0/10).</span>
+<span id="cb1-585"><a href="#cb1-585" aria-hidden="true" tabindex="-1"></a>The two questions that previously never retrieved their correct chunk at</span>
+<span id="cb1-586"><a href="#cb1-586" aria-hidden="true" tabindex="-1"></a>all (<span class="in">`chen_pooled_or`</span>, <span class="in">`chen_sensitivity_or`</span> - both from Chen et al.&#39;s</span>
+<span id="cb1-587"><a href="#cb1-587" aria-hidden="true" tabindex="-1"></a>meta-analysis) are now both present in the results, ranked #3. Chen et</span>
+<span id="cb1-588"><a href="#cb1-588" aria-hidden="true" tabindex="-1"></a>al.&#39;s chunks still tend to rank lower than the other two papers&#39; - worth</span>
+<span id="cb1-589"><a href="#cb1-589" aria-hidden="true" tabindex="-1"></a>watching, not yet a new problem on its own.</span>
+<span id="cb1-590"><a href="#cb1-590" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-591"><a href="#cb1-591" aria-hidden="true" tabindex="-1"></a>The deliberate cross-document trap question, <span class="in">`receptor_location_meier`</span></span>
+<span id="cb1-592"><a href="#cb1-592" aria-hidden="true" tabindex="-1"></a>(does the system correctly attribute a claim to Meier et al. rather than</span>
+<span id="cb1-593"><a href="#cb1-593" aria-hidden="true" tabindex="-1"></a>blending it with Cooper &amp; van Raalte&#39;s different claim on the same</span>
+<span id="cb1-594"><a href="#cb1-594" aria-hidden="true" tabindex="-1"></a>topic), now ranks its correct chunk #1 - it did not before.</span>
+<span id="cb1-595"><a href="#cb1-595" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-596"><a href="#cb1-596" aria-hidden="true" tabindex="-1"></a>The synthesis questions did not improve, and one got worse.</span>
+<span id="cb1-597"><a href="#cb1-597" aria-hidden="true" tabindex="-1"></a><span class="in">`dominant_evidence_population`</span> still finds none of its 3 source</span>
+<span id="cb1-598"><a href="#cb1-598" aria-hidden="true" tabindex="-1"></a>documents (0/3, unchanged). <span class="in">`diabetic_vs_nondiabetic_evidence`</span> went from</span>
+<span id="cb1-599"><a href="#cb1-599" aria-hidden="true" tabindex="-1"></a>finding 2 of 3 source documents to finding only 1 of 3 (Meier, at rank 1</span>
+<span id="cb1-600"><a href="#cb1-600" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>Cooper and Chen are both now missing) - a real regression, flagged as</span>
+<span id="cb1-601"><a href="#cb1-601" aria-hidden="true" tabindex="-1"></a>an open investigation rather than a diagnosed and fixed issue. One</span>
+<span id="cb1-602"><a href="#cb1-602" aria-hidden="true" tabindex="-1"></a>working theory: a reranker is built to push forward the single chunk</span>
+<span id="cb1-603"><a href="#cb1-603" aria-hidden="true" tabindex="-1"></a>that reads as *most* relevant to the exact wording of the question,</span>
+<span id="cb1-604"><a href="#cb1-604" aria-hidden="true" tabindex="-1"></a>which can work against a synthesis question that genuinely needs several</span>
+<span id="cb1-605"><a href="#cb1-605" aria-hidden="true" tabindex="-1"></a>*different* documents represented in the results, rather than several</span>
+<span id="cb1-606"><a href="#cb1-606" aria-hidden="true" tabindex="-1"></a>similar-sounding ones from the same document.</span>
+<span id="cb1-607"><a href="#cb1-607" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-608"><a href="#cb1-608" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-609"><a href="#cb1-609" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-610"><a href="#cb1-610" aria-hidden="true" tabindex="-1"></a><span class="fu">## Article agent evaluation</span></span>
+<span id="cb1-611"><a href="#cb1-611" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-612"><a href="#cb1-612" aria-hidden="true" tabindex="-1"></a><span class="in">`test_the_articles.py`</span> runs the same questions through the real agent,</span>
+<span id="cb1-613"><a href="#cb1-613" aria-hidden="true" tabindex="-1"></a>three layers, the same matching method as <span class="in">`test_the_agent.py`</span> (a</span>
+<span id="cb1-614"><a href="#cb1-614" aria-hidden="true" tabindex="-1"></a>haystack substring search over the stringified evidence, not structural</span>
+<span id="cb1-615"><a href="#cb1-615" aria-hidden="true" tabindex="-1"></a>parsing of the tool result&#39;s exact shape).</span>
+<span id="cb1-616"><a href="#cb1-616" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-617"><a href="#cb1-617" aria-hidden="true" tabindex="-1"></a>**Re-run 2026-08-14 (BM25 + reranker in place) shows a real</span>
+<span id="cb1-618"><a href="#cb1-618" aria-hidden="true" tabindex="-1"></a>improvement.** Two of the three previously-flagged questions now pass</span>
+<span id="cb1-619"><a href="#cb1-619" aria-hidden="true" tabindex="-1"></a>outright, and the pending retrieval fix confirmed elsewhere on this page</span>
+<span id="cb1-620"><a href="#cb1-620" aria-hidden="true" tabindex="-1"></a>has clearly carried through into this end-to-end agent eval too:</span>
+<span id="cb1-621"><a href="#cb1-621" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-622"><a href="#cb1-622" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`receptor_location_meier`** - *&quot;Where are GLP-1 receptors</span>
+<span id="cb1-623"><a href="#cb1-623" aria-hidden="true" tabindex="-1"></a>  predominantly expressed in the kidney, per Meier et al.?&quot;* - the</span>
+<span id="cb1-624"><a href="#cb1-624" aria-hidden="true" tabindex="-1"></a>  deliberate cross-document trap question - now passes all three layers.</span>
+<span id="cb1-625"><a href="#cb1-625" aria-hidden="true" tabindex="-1"></a>  The correct chunk is retrieved and the final answer correctly</span>
+<span id="cb1-626"><a href="#cb1-626" aria-hidden="true" tabindex="-1"></a>  attributes the claim to Meier (proximal tubular cells / renal</span>
+<span id="cb1-627"><a href="#cb1-627" aria-hidden="true" tabindex="-1"></a>  vasculature / afferent arteriole) without blending in Cooper&#39;s</span>
+<span id="cb1-628"><a href="#cb1-628" aria-hidden="true" tabindex="-1"></a>  different claim. This is the one question on this page specifically</span>
+<span id="cb1-629"><a href="#cb1-629" aria-hidden="true" tabindex="-1"></a>  built to test claim-to-paper attribution, and it now holds up.</span>
+<span id="cb1-630"><a href="#cb1-630" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`discontinuation_rate`** - *&quot;What percentage of subjects stopped</span>
+<span id="cb1-631"><a href="#cb1-631" aria-hidden="true" tabindex="-1"></a>  GLP-1 receptor agonist treatment due to side effects, per Cooper &amp; van</span>
+<span id="cb1-632"><a href="#cb1-632" aria-hidden="true" tabindex="-1"></a>  Raalte?&quot;* - also now passes all three layers. Previously this was one</span>
+<span id="cb1-633"><a href="#cb1-633" aria-hidden="true" tabindex="-1"></a>  of two pretraining-recall flags (wrong/missing retrieval, but a</span>
+<span id="cb1-634"><a href="#cb1-634" aria-hidden="true" tabindex="-1"></a>  correct final answer anyway - genuinely ambiguous for a real,</span>
+<span id="cb1-635"><a href="#cb1-635" aria-hidden="true" tabindex="-1"></a>  published paper Claude may already know from training). With Layer 2</span>
+<span id="cb1-636"><a href="#cb1-636" aria-hidden="true" tabindex="-1"></a>  now passing too, that ambiguity is gone: this is confirmed real</span>
+<span id="cb1-637"><a href="#cb1-637" aria-hidden="true" tabindex="-1"></a>  retrieval, not a lucky guess from pretraining.</span>
+<span id="cb1-638"><a href="#cb1-638" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-639"><a href="#cb1-639" aria-hidden="true" tabindex="-1"></a>::: {.callout-warning}</span>
+<span id="cb1-640"><a href="#cb1-640" aria-hidden="true" tabindex="-1"></a><span class="fu">### Issues Found</span></span>
+<span id="cb1-641"><a href="#cb1-641" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-642"><a href="#cb1-642" aria-hidden="true" tabindex="-1"></a>Real run, 2026-08-14 (BM25 + reranker in place) - 3 of 12 questions</span>
+<span id="cb1-643"><a href="#cb1-643" aria-hidden="true" tabindex="-1"></a>still have an open issue:</span>
+<span id="cb1-644"><a href="#cb1-644" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-645"><a href="#cb1-645" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`chen_patient_count`** - *&quot;How many patients did Chen et al. include</span>
+<span id="cb1-646"><a href="#cb1-646" aria-hidden="true" tabindex="-1"></a>  with baseline eGFR under 60?&quot;* - now fails both Layer 2 and Layer 3</span>
+<span id="cb1-647"><a href="#cb1-647" aria-hidden="true" tabindex="-1"></a>  (previously only Layer 3 failed). The chunk containing the correct</span>
+<span id="cb1-648"><a href="#cb1-648" aria-hidden="true" tabindex="-1"></a>  figure (&quot;17,996&quot;) wasn&#39;t retrieved this time; instead the agent&#39;s</span>
+<span id="cb1-649"><a href="#cb1-649" aria-hidden="true" tabindex="-1"></a>  answer states &quot;15,164 patients&quot; - a different number, pulled from a</span>
+<span id="cb1-650"><a href="#cb1-650" aria-hidden="true" tabindex="-1"></a>  different chunk of the same paper. This has moved from a pure</span>
+<span id="cb1-651"><a href="#cb1-651" aria-hidden="true" tabindex="-1"></a>  synthesis issue to a retrieval and wrong answer issue: the agent didn&#39;t fail to reason</span>
+<span id="cb1-652"><a href="#cb1-652" aria-hidden="true" tabindex="-1"></a>  about the right evidence, it was never shown the right evidence to</span>
+<span id="cb1-653"><a href="#cb1-653" aria-hidden="true" tabindex="-1"></a>  reason about.</span>
+<span id="cb1-654"><a href="#cb1-654" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`diabetic_vs_nondiabetic_evidence`** (synthesis) - *&quot;Across Cooper,</span>
+<span id="cb1-655"><a href="#cb1-655" aria-hidden="true" tabindex="-1"></a>  Meier, and Chen, is the kidney-protective benefit of GLP-1 receptor</span>
+<span id="cb1-656"><a href="#cb1-656" aria-hidden="true" tabindex="-1"></a>  agonists more established in patients with diabetes or without</span>
+<span id="cb1-657"><a href="#cb1-657" aria-hidden="true" tabindex="-1"></a>  diabetes?&quot;* - Layer 2 improved from 1 of 3 source documents found to 2</span>
+<span id="cb1-658"><a href="#cb1-658" aria-hidden="true" tabindex="-1"></a>  of 3 (Meier and Chen both found; Cooper still missing), and Layer 3</span>
+<span id="cb1-659"><a href="#cb1-659" aria-hidden="true" tabindex="-1"></a>  still passes. The final answer does cite Cooper once, but from a</span>
+<span id="cb1-660"><a href="#cb1-660" aria-hidden="true" tabindex="-1"></a>  different chunk (about preclinical kidney-fat/lipotoxicity work) than</span>
+<span id="cb1-661"><a href="#cb1-661" aria-hidden="true" tabindex="-1"></a>  the one ground truth expects (the one stating the benefit &quot;extended to</span>
+<span id="cb1-662"><a href="#cb1-662" aria-hidden="true" tabindex="-1"></a>  individuals without T2D&quot;) - so Cooper&#39;s specific expected evidence</span>
+<span id="cb1-663"><a href="#cb1-663" aria-hidden="true" tabindex="-1"></a>  still isn&#39;t part of what the agent actually saw, even though a Cooper</span>
+<span id="cb1-664"><a href="#cb1-664" aria-hidden="true" tabindex="-1"></a>  citation appears in the answer.</span>
+<span id="cb1-665"><a href="#cb1-665" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**`dominant_evidence_population`** (synthesis) - *&quot;What population</span>
+<span id="cb1-666"><a href="#cb1-666" aria-hidden="true" tabindex="-1"></a>  does most current GLP-1 receptor agonist clinical trial evidence for</span>
+<span id="cb1-667"><a href="#cb1-667" aria-hidden="true" tabindex="-1"></a>  kidney outcomes focus on, according to these three papers?&quot;* -</span>
+<span id="cb1-668"><a href="#cb1-668" aria-hidden="true" tabindex="-1"></a>  unchanged: Layer 2 still fails (0 of 3 source documents found) while</span>
+<span id="cb1-669"><a href="#cb1-669" aria-hidden="true" tabindex="-1"></a>  Layer 3 still passes. This remains the second, still-open</span>
+<span id="cb1-670"><a href="#cb1-670" aria-hidden="true" tabindex="-1"></a>  pretraining-recall flag - the final answer is substantively correct,</span>
+<span id="cb1-671"><a href="#cb1-671" aria-hidden="true" tabindex="-1"></a>  but with no confirmed retrieval behind it, it&#39;s still unclear whether</span>
+<span id="cb1-672"><a href="#cb1-672" aria-hidden="true" tabindex="-1"></a>  that correctness came from this system&#39;s pipeline or from Claude</span>
+<span id="cb1-673"><a href="#cb1-673" aria-hidden="true" tabindex="-1"></a>  already knowing the answer. Not yet re-checked in a fresh, tool-less</span>
+<span id="cb1-674"><a href="#cb1-674" aria-hidden="true" tabindex="-1"></a>  conversation to rule that out.</span>
+<span id="cb1-675"><a href="#cb1-675" aria-hidden="true" tabindex="-1"></a>:::</span>
+<span id="cb1-676"><a href="#cb1-676" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-677"><a href="#cb1-677" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb1-678"><a href="#cb1-678" aria-hidden="true" tabindex="-1"></a><span class="fu">### Final Results</span></span>
 <span id="cb1-679"><a href="#cb1-679" aria-hidden="true" tabindex="-1"></a></span>
@@ -3998,73 +4105,83 @@ background-color: #ffffff;
 <span id="cb1-685"><a href="#cb1-685" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 2 - Retrieval <span class="pp">|</span> 8    <span class="pp">|</span> 3    <span class="pp">|</span> 1 (1 of 3 docs) <span class="pp">|</span></span>
 <span id="cb1-686"><a href="#cb1-686" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 3 - Answer    <span class="pp">|</span> 10   <span class="pp">|</span> 2    <span class="pp">|</span> 0               <span class="pp">|</span></span>
 <span id="cb1-687"><a href="#cb1-687" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-688"><a href="#cb1-688" aria-hidden="true" tabindex="-1"></a>3 of the 12 questions above are the findings noted earlier - not</span>
-<span id="cb1-689"><a href="#cb1-689" aria-hidden="true" tabindex="-1"></a>blocking, but worth knowing about if this track gets used for more than</span>
-<span id="cb1-690"><a href="#cb1-690" aria-hidden="true" tabindex="-1"></a>a demo.</span>
-<span id="cb1-691"><a href="#cb1-691" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-692"><a href="#cb1-692" aria-hidden="true" tabindex="-1"></a><span class="fu"># What&#39;s still worth building</span></span>
-<span id="cb1-693"><a href="#cb1-693" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-694"><a href="#cb1-694" aria-hidden="true" tabindex="-1"></a>Two categories of further evaluation were scoped but not yet built,</span>
-<span id="cb1-695"><a href="#cb1-695" aria-hidden="true" tabindex="-1"></a>prioritised by what kind of question they answer:</span>
-<span id="cb1-696"><a href="#cb1-696" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-697"><a href="#cb1-697" aria-hidden="true" tabindex="-1"></a>**Core correctness** - is the system doing its actual job well:</span>
-<span id="cb1-698"><a href="#cb1-698" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-699"><a href="#cb1-699" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Confidence calibration** - does a &quot;high confidence&quot; label on a</span>
-<span id="cb1-700"><a href="#cb1-700" aria-hidden="true" tabindex="-1"></a>  narrative answer actually correspond to a strong retrieval match, or</span>
-<span id="cb1-701"><a href="#cb1-701" aria-hidden="true" tabindex="-1"></a>  can it appear on a weak one too? A mislabelled confidence score is</span>
-<span id="cb1-702"><a href="#cb1-702" aria-hidden="true" tabindex="-1"></a>  worse than no label at all, since it creates false trust.</span>
-<span id="cb1-703"><a href="#cb1-703" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Audit/verification stress test** - the agent&#39;s built-in verification</span>
-<span id="cb1-704"><a href="#cb1-704" aria-hidden="true" tabindex="-1"></a>  pass has been seen catching real problems informally, but was never</span>
-<span id="cb1-705"><a href="#cb1-705" aria-hidden="true" tabindex="-1"></a>  deliberately stress-tested with a known-bad claim to confirm it</span>
-<span id="cb1-706"><a href="#cb1-706" aria-hidden="true" tabindex="-1"></a>  catches issues reliably rather than by chance. One real, reproducible</span>
-<span id="cb1-707"><a href="#cb1-707" aria-hidden="true" tabindex="-1"></a>  weakness *was* found and fixed this cycle along the way: the auditor</span>
-<span id="cb1-708"><a href="#cb1-708" aria-hidden="true" tabindex="-1"></a>  would sometimes conclude, in its own words, that a claim was</span>
-<span id="cb1-709"><a href="#cb1-709" aria-hidden="true" tabindex="-1"></a>  &quot;supported... not an issue&quot; and then still list it as a failure - now</span>
-<span id="cb1-710"><a href="#cb1-710" aria-hidden="true" tabindex="-1"></a>  caught by a code-level safety net regardless of what the auditor&#39;s own</span>
-<span id="cb1-711"><a href="#cb1-711" aria-hidden="true" tabindex="-1"></a>  output says.</span>
-<span id="cb1-712"><a href="#cb1-712" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Multi-turn memory beyond one scenario** - only one two-turn memory</span>
-<span id="cb1-713"><a href="#cb1-713" aria-hidden="true" tabindex="-1"></a>  case is tested today. Real conversations involve corrections, topic</span>
-<span id="cb1-714"><a href="#cb1-714" aria-hidden="true" tabindex="-1"></a>  switches, and referring back further than a single turn.</span>
-<span id="cb1-715"><a href="#cb1-715" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-716"><a href="#cb1-716" aria-hidden="true" tabindex="-1"></a>**Guardrails** - does the system avoid doing something actively harmful</span>
-<span id="cb1-717"><a href="#cb1-717" aria-hidden="true" tabindex="-1"></a>or non-compliant, separate from whether it&#39;s technically correct:</span>
-<span id="cb1-718"><a href="#cb1-718" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-719"><a href="#cb1-719" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Adverse event detection** - recognising when a rep mentions</span>
-<span id="cb1-720"><a href="#cb1-720" aria-hidden="true" tabindex="-1"></a>  something that sounds like a patient reaction and needs escalation,</span>
-<span id="cb1-721"><a href="#cb1-721" aria-hidden="true" tabindex="-1"></a>  not just a conversational reply. Needs a policy decision (what the</span>
-<span id="cb1-722"><a href="#cb1-722" aria-hidden="true" tabindex="-1"></a>  system should actually *do* when it detects one) before it can be</span>
-<span id="cb1-723"><a href="#cb1-723" aria-hidden="true" tabindex="-1"></a>  built as code.</span>
-<span id="cb1-724"><a href="#cb1-724" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Promotional / label compliance** - never implying FDA approval</span>
-<span id="cb1-725"><a href="#cb1-725" aria-hidden="true" tabindex="-1"></a>  (Rabivy is still investigational), never dropping the &quot;Phase 2 only&quot;</span>
-<span id="cb1-726"><a href="#cb1-726" aria-hidden="true" tabindex="-1"></a>  qualifier from an efficacy claim, never overstating a competitive</span>
-<span id="cb1-727"><a href="#cb1-727" aria-hidden="true" tabindex="-1"></a>  claim beyond what the data supports.</span>
-<span id="cb1-728"><a href="#cb1-728" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Off-label steering** - never encouraging use outside Rabivy&#39;s actual</span>
-<span id="cb1-729"><a href="#cb1-729" aria-hidden="true" tabindex="-1"></a>  studied indications.</span>
-<span id="cb1-730"><a href="#cb1-730" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-731"><a href="#cb1-731" aria-hidden="true" tabindex="-1"></a>Two further items were deliberately *not* pursued, on purpose: a direct</span>
-<span id="cb1-732"><a href="#cb1-732" aria-hidden="true" tabindex="-1"></a>regex-vs-agent comparison (the decision to use the agent is already</span>
-<span id="cb1-733"><a href="#cb1-733" aria-hidden="true" tabindex="-1"></a>made, and the golden 30 has been iteratively tuned against the regex</span>
-<span id="cb1-734"><a href="#cb1-734" aria-hidden="true" tabindex="-1"></a>router&#39;s quirks over the life of this project, which would bias any</span>
-<span id="cb1-735"><a href="#cb1-735" aria-hidden="true" tabindex="-1"></a>comparison unfairly), and a &quot;does it commit to an answer&quot; hedging test</span>
-<span id="cb1-736"><a href="#cb1-736" aria-hidden="true" tabindex="-1"></a>(proposed without ever actually observing the problem happen - not worth</span>
-<span id="cb1-737"><a href="#cb1-737" aria-hidden="true" tabindex="-1"></a>building an eval for a failure mode with no real evidence behind it</span>
-<span id="cb1-738"><a href="#cb1-738" aria-hidden="true" tabindex="-1"></a>yet).</span>
-<span id="cb1-739"><a href="#cb1-739" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-740"><a href="#cb1-740" aria-hidden="true" tabindex="-1"></a>------------------------------------------------------------------------</span>
-<span id="cb1-741"><a href="#cb1-741" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-742"><a href="#cb1-742" aria-hidden="true" tabindex="-1"></a>*AX Consult Group. Rabivy is used here as a commercial analytics</span>
-<span id="cb1-743"><a href="#cb1-743" aria-hidden="true" tabindex="-1"></a>showcase and is not intended for clinical use.*</span>
-<span id="cb1-744"><a href="#cb1-744" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-745"><a href="#cb1-745" aria-hidden="true" tabindex="-1"></a>[View the project on</span>
-<span id="cb1-746"><a href="#cb1-746" aria-hidden="true" tabindex="-1"></a>GitHub](https://github.com/AX-Consult-Group/medical-Rabivy-AI-engine)</span>
-<span id="cb1-747"><a href="#cb1-747" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-748"><a href="#cb1-748" aria-hidden="true" tabindex="-1"></a>::: {.nav-bar style=&quot;text-align:center; margin: 6px 0 18px 0;&quot;}</span>
-<span id="cb1-749"><a href="#cb1-749" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Project Overview</span><span class="co">](index.html)</span>{style=&quot;margin-right: 24px; font-weight: 600; white-space: nowrap;&quot;}</span>
-<span id="cb1-750"><a href="#cb1-750" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Evaluation Suite</span><span class="co">](evals.html)</span>{style=&quot;margin-right: 24px; font-weight: 600; white-space: nowrap;&quot;}</span>
-<span id="cb1-751"><a href="#cb1-751" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Live Queries and User Feedback</span><span class="co">](live_queries_&amp;_user_feedback.html)</span>{style=&quot;margin-right: 24px; font-weight: 600; white-space: nowrap;&quot;}</span>
-<span id="cb1-752"><a href="#cb1-752" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Dashboard Write Up</span><span class="co">](maintenance_dashboard.html)</span>{style=&quot;margin-right: 24px; font-weight: 600; white-space: nowrap;&quot;}</span>
-<span id="cb1-753"><a href="#cb1-753" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Maintenance Dashboard</span><span class="co">](dashboard.html)</span>{style=&quot;font-weight: 600; white-space: nowrap;&quot;}</span>
-<span id="cb1-754"><a href="#cb1-754" aria-hidden="true" tabindex="-1"></a>:::</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal><i class="bi"></i></button></div>
+<span id="cb1-688"><a href="#cb1-688" aria-hidden="true" tabindex="-1"></a>Real run, after BM25 and reranking, 2026-08-14:</span>
+<span id="cb1-689"><a href="#cb1-689" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-690"><a href="#cb1-690" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer               <span class="pp">|</span> Pass <span class="pp">|</span> Fail <span class="pp">|</span> Partial         <span class="pp">|</span></span>
+<span id="cb1-691"><a href="#cb1-691" aria-hidden="true" tabindex="-1"></a><span class="pp">|---------------------|------|------|-----------------|</span></span>
+<span id="cb1-692"><a href="#cb1-692" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 1 - Routing   <span class="pp">|</span> 12   <span class="pp">|</span> 0    <span class="pp">|</span> 0               <span class="pp">|</span></span>
+<span id="cb1-693"><a href="#cb1-693" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 2 - Retrieval <span class="pp">|</span> 9    <span class="pp">|</span> 2    <span class="pp">|</span> 1 (2 of 3 docs) <span class="pp">|</span></span>
+<span id="cb1-694"><a href="#cb1-694" aria-hidden="true" tabindex="-1"></a><span class="pp">|</span> Layer 3 - Answer    <span class="pp">|</span> 11   <span class="pp">|</span> 1    <span class="pp">|</span> 0               <span class="pp">|</span></span>
+<span id="cb1-695"><a href="#cb1-695" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-696"><a href="#cb1-696" aria-hidden="true" tabindex="-1"></a>A real, measurable improvement: Layer 2 gains a question (8 -&gt; 9 pass)</span>
+<span id="cb1-697"><a href="#cb1-697" aria-hidden="true" tabindex="-1"></a>and its one remaining partial improved from 1/3 to 2/3 source documents</span>
+<span id="cb1-698"><a href="#cb1-698" aria-hidden="true" tabindex="-1"></a>found; Layer 3 gains a question too (10 -&gt; 11 pass). The 3 questions</span>
+<span id="cb1-699"><a href="#cb1-699" aria-hidden="true" tabindex="-1"></a>above are what&#39;s left - not blocking, but worth knowing about if this</span>
+<span id="cb1-700"><a href="#cb1-700" aria-hidden="true" tabindex="-1"></a>track gets used for more than a demo.</span>
+<span id="cb1-701"><a href="#cb1-701" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-702"><a href="#cb1-702" aria-hidden="true" tabindex="-1"></a><span class="fu"># What&#39;s still worth building</span></span>
+<span id="cb1-703"><a href="#cb1-703" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-704"><a href="#cb1-704" aria-hidden="true" tabindex="-1"></a>Two categories of further evaluation were scoped but not yet built,</span>
+<span id="cb1-705"><a href="#cb1-705" aria-hidden="true" tabindex="-1"></a>prioritised by what kind of question they answer:</span>
+<span id="cb1-706"><a href="#cb1-706" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-707"><a href="#cb1-707" aria-hidden="true" tabindex="-1"></a>**Core correctness** - is the system doing its actual job well:</span>
+<span id="cb1-708"><a href="#cb1-708" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-709"><a href="#cb1-709" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Confidence calibration** - does a &quot;high confidence&quot; label on a</span>
+<span id="cb1-710"><a href="#cb1-710" aria-hidden="true" tabindex="-1"></a>  narrative answer actually correspond to a strong retrieval match, or</span>
+<span id="cb1-711"><a href="#cb1-711" aria-hidden="true" tabindex="-1"></a>  can it appear on a weak one too? A mislabelled confidence score is</span>
+<span id="cb1-712"><a href="#cb1-712" aria-hidden="true" tabindex="-1"></a>  worse than no label at all, since it creates false trust.</span>
+<span id="cb1-713"><a href="#cb1-713" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Audit/verification stress test** - the agent&#39;s built-in verification</span>
+<span id="cb1-714"><a href="#cb1-714" aria-hidden="true" tabindex="-1"></a>  pass has been seen catching real problems informally, but was never</span>
+<span id="cb1-715"><a href="#cb1-715" aria-hidden="true" tabindex="-1"></a>  deliberately stress-tested with a known-bad claim to confirm it</span>
+<span id="cb1-716"><a href="#cb1-716" aria-hidden="true" tabindex="-1"></a>  catches issues reliably rather than by chance. One real, reproducible</span>
+<span id="cb1-717"><a href="#cb1-717" aria-hidden="true" tabindex="-1"></a>  weakness *was* found and fixed this cycle along the way: the auditor</span>
+<span id="cb1-718"><a href="#cb1-718" aria-hidden="true" tabindex="-1"></a>  would sometimes conclude, in its own words, that a claim was</span>
+<span id="cb1-719"><a href="#cb1-719" aria-hidden="true" tabindex="-1"></a>  &quot;supported... not an issue&quot; and then still list it as a failure - now</span>
+<span id="cb1-720"><a href="#cb1-720" aria-hidden="true" tabindex="-1"></a>  caught by a code-level safety net regardless of what the auditor&#39;s own</span>
+<span id="cb1-721"><a href="#cb1-721" aria-hidden="true" tabindex="-1"></a>  output says.</span>
+<span id="cb1-722"><a href="#cb1-722" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Multi-turn memory beyond one scenario** - only one two-turn memory</span>
+<span id="cb1-723"><a href="#cb1-723" aria-hidden="true" tabindex="-1"></a>  case is tested today. Real conversations involve corrections, topic</span>
+<span id="cb1-724"><a href="#cb1-724" aria-hidden="true" tabindex="-1"></a>  switches, and referring back further than a single turn.</span>
+<span id="cb1-725"><a href="#cb1-725" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-726"><a href="#cb1-726" aria-hidden="true" tabindex="-1"></a>**Guardrails** - does the system avoid doing something actively harmful</span>
+<span id="cb1-727"><a href="#cb1-727" aria-hidden="true" tabindex="-1"></a>or non-compliant, separate from whether it&#39;s technically correct:</span>
+<span id="cb1-728"><a href="#cb1-728" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-729"><a href="#cb1-729" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Adverse event detection** - recognising when a rep mentions</span>
+<span id="cb1-730"><a href="#cb1-730" aria-hidden="true" tabindex="-1"></a>  something that sounds like a patient reaction and needs escalation,</span>
+<span id="cb1-731"><a href="#cb1-731" aria-hidden="true" tabindex="-1"></a>  not just a conversational reply. Needs a policy decision (what the</span>
+<span id="cb1-732"><a href="#cb1-732" aria-hidden="true" tabindex="-1"></a>  system should actually *do* when it detects one) before it can be</span>
+<span id="cb1-733"><a href="#cb1-733" aria-hidden="true" tabindex="-1"></a>  built as code.</span>
+<span id="cb1-734"><a href="#cb1-734" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Promotional / label compliance** - never implying FDA approval</span>
+<span id="cb1-735"><a href="#cb1-735" aria-hidden="true" tabindex="-1"></a>  (Rabivy is still investigational), never dropping the &quot;Phase 2 only&quot;</span>
+<span id="cb1-736"><a href="#cb1-736" aria-hidden="true" tabindex="-1"></a>  qualifier from an efficacy claim, never overstating a competitive</span>
+<span id="cb1-737"><a href="#cb1-737" aria-hidden="true" tabindex="-1"></a>  claim beyond what the data supports.</span>
+<span id="cb1-738"><a href="#cb1-738" aria-hidden="true" tabindex="-1"></a><span class="ss">- </span>**Off-label steering** - never encouraging use outside Rabivy&#39;s actual</span>
+<span id="cb1-739"><a href="#cb1-739" aria-hidden="true" tabindex="-1"></a>  studied indications.</span>
+<span id="cb1-740"><a href="#cb1-740" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-741"><a href="#cb1-741" aria-hidden="true" tabindex="-1"></a>Two further items were deliberately *not* pursued, on purpose: a direct</span>
+<span id="cb1-742"><a href="#cb1-742" aria-hidden="true" tabindex="-1"></a>regex-vs-agent comparison (the decision to use the agent is already</span>
+<span id="cb1-743"><a href="#cb1-743" aria-hidden="true" tabindex="-1"></a>made, and the golden 30 has been iteratively tuned against the regex</span>
+<span id="cb1-744"><a href="#cb1-744" aria-hidden="true" tabindex="-1"></a>router&#39;s quirks over the life of this project, which would bias any</span>
+<span id="cb1-745"><a href="#cb1-745" aria-hidden="true" tabindex="-1"></a>comparison unfairly), and a &quot;does it commit to an answer&quot; hedging test</span>
+<span id="cb1-746"><a href="#cb1-746" aria-hidden="true" tabindex="-1"></a>(proposed without ever actually observing the problem happen - not worth</span>
+<span id="cb1-747"><a href="#cb1-747" aria-hidden="true" tabindex="-1"></a>building an eval for a failure mode with no real evidence behind it</span>
+<span id="cb1-748"><a href="#cb1-748" aria-hidden="true" tabindex="-1"></a>yet).</span>
+<span id="cb1-749"><a href="#cb1-749" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-750"><a href="#cb1-750" aria-hidden="true" tabindex="-1"></a>------------------------------------------------------------------------</span>
+<span id="cb1-751"><a href="#cb1-751" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-752"><a href="#cb1-752" aria-hidden="true" tabindex="-1"></a>*AX Consult Group. Rabivy is used here as a commercial analytics</span>
+<span id="cb1-753"><a href="#cb1-753" aria-hidden="true" tabindex="-1"></a>showcase and is not intended for clinical use.*</span>
+<span id="cb1-754"><a href="#cb1-754" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-755"><a href="#cb1-755" aria-hidden="true" tabindex="-1"></a>[View the project on</span>
+<span id="cb1-756"><a href="#cb1-756" aria-hidden="true" tabindex="-1"></a>GitHub](https://github.com/AX-Consult-Group/medical-Rabivy-AI-engine)</span>
+<span id="cb1-757"><a href="#cb1-757" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-758"><a href="#cb1-758" aria-hidden="true" tabindex="-1"></a>::: {.nav-bar style=&quot;text-align:center; margin: 6px 0 18px 0;&quot;}</span>
+<span id="cb1-759"><a href="#cb1-759" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Project Overview</span><span class="co">](index.html)</span>{style=&quot;margin-right: 24px; font-weight: 600; white-space: nowrap;&quot;}</span>
+<span id="cb1-760"><a href="#cb1-760" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Evaluation Suite</span><span class="co">](evals.html)</span>{style=&quot;margin-right: 24px; font-weight: 600; white-space: nowrap;&quot;}</span>
+<span id="cb1-761"><a href="#cb1-761" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Live Queries and User Feedback</span><span class="co">](live_queries_&amp;_user_feedback.html)</span>{style=&quot;margin-right: 24px; font-weight: 600; white-space: nowrap;&quot;}</span>
+<span id="cb1-762"><a href="#cb1-762" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Dashboard Write Up</span><span class="co">](maintenance_dashboard.html)</span>{style=&quot;margin-right: 24px; font-weight: 600; white-space: nowrap;&quot;}</span>
+<span id="cb1-763"><a href="#cb1-763" aria-hidden="true" tabindex="-1"></a><span class="co">[</span><span class="ot">Maintenance Dashboard</span><span class="co">](dashboard.html)</span>{style=&quot;font-weight: 600; white-space: nowrap;&quot;}</span>
+<span id="cb1-764"><a href="#cb1-764" aria-hidden="true" tabindex="-1"></a>:::</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
 

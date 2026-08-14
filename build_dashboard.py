@@ -1113,9 +1113,23 @@ button:disabled{opacity:.4;cursor:default}
 .dlabel{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.03em;margin:0 0 4px}
 .dtext{margin:0;color:var(--text)}
 .quote{background:var(--card);border-left:2px solid var(--border);border-radius:0 6px 6px 0;padding:8px 10px;margin:0;color:var(--text)}
-.candidates{margin:4px 0 0;padding:0;list-style:none}
-.candidates li{display:flex;justify-content:space-between;gap:10px;padding:3px 0;color:var(--text-dim)}
-.candidates li.hit{color:var(--green)}
+/* Candidate-chunk table (Layer 2 narrative detail) - replaced the old
+   inline-text list on 2026-08-14 because "sem 0.705 · kw 9.53" tacked
+   onto the end of a variable-length chunk name never lined up between
+   rows. Real columns instead: chunk name on the left, one column per
+   score on the right, digits given tabular-nums so they stack cleanly.
+   No visible gridlines (kept in the same minimal style as the rest of
+   the dashboard) - just a subtle row separator, same border color used
+   everywhere else here. */
+.ctable{margin:4px 0 0;font-size:12.5px;border-top:1px solid var(--border)}
+.ctable .thead{display:flex;padding:6px 0;color:var(--text-faint);font-size:10.5px;
+  text-transform:uppercase;letter-spacing:.02em}
+.ctable .thead>div{cursor:help}
+.ctable .row{display:flex;align-items:flex-start;padding:5px 0;border-top:1px solid var(--border);color:var(--text-dim)}
+.ctable .row.hit{color:var(--green)}
+.ctable .c-chunk{flex:3.4;word-break:break-word;padding-right:10px}
+.ctable .c-chunk .tag{font-size:10.5px}
+.ctable .c-num{flex:1;text-align:right;font-variant-numeric:tabular-nums}
 .kv{display:flex;gap:16px}
 .kv .box{flex:1;background:var(--card);border-radius:6px;padding:8px 10px}
 .footnote{font-size:12px;color:var(--text-faint);margin-top:14px}
@@ -1592,11 +1606,37 @@ function retrievalHTML(ret){
   // produced - every question type gets something here now.
   if(!ret) return '<p class="dtext">-</p>';
   if(ret.kind === 'narrative'){
-    const items = (ret.candidates||[]).map(c =>
-      '<li class="'+(c.is_expected?'hit':'')+'">'+esc(c.chunk_id)+(c.is_expected?' (correct chunk)':'')+'<span>'+(c.similarity!=null?c.similarity.toFixed(3):'-')+'</span></li>'
-    ).join('');
-    const rankText = ret.rank ? ('Ranked #'+ret.rank+' of '+(ret.candidates||[]).length+' chunks pulled, by cosine similarity') : 'Correct chunk not found among the retrieved chunks';
-    return '<p class="dtext">'+rankText+'</p><ul class="candidates">'+items+'</ul>';
+    // 2026-08-13: candidates may carry bm25_score alongside similarity
+    // (present only on records captured after hybrid search shipped).
+    // 2026-08-14: candidates may also carry rerank_score (step 6, the
+    // cross-encoder reranker). All three are non-comparable numbers -
+    // shown as their own table column rather than blended into one,
+    // with a hover tooltip on each column header explaining what that
+    // number is and how it fits in. Older eval_runs records simply
+    // won't have some of these fields - each column degrades on its
+    // own (a '-' cell) rather than changing the table's shape.
+    const hasKw = (ret.candidates||[]).some(c => c.bm25_score!=null);
+    const hasRerank = (ret.candidates||[]).some(c => c.rerank_score!=null);
+    const numTxt = (v, digits) => v!=null ? v.toFixed(digits) : '-';
+    const headerCells =
+      '<div class="c-num" title="Meaning-based match: embedding cosine similarity, 0-1. How close this chunk is to the question in MEANING.">sem</div>'
+      + (hasKw ? '<div class="c-num" title="Keyword match: BM25 score, unbounded. How many exact words/numbers this chunk shares with the question.">kw</div>' : '')
+      + (hasRerank ? '<div class="c-num" title="Cross-encoder reranker score. Reads the question and this chunk TOGETHER and judges relevance directly - this decided the final order below, when it ran.">rerank</div>' : '');
+    const rows = (ret.candidates||[]).map(c => {
+      const cells = '<div class="c-num">'+numTxt(c.similarity, 3)+'</div>'
+        + (hasKw ? '<div class="c-num">'+numTxt(c.bm25_score, 2)+'</div>' : '')
+        + (hasRerank ? '<div class="c-num">'+numTxt(c.rerank_score, 3)+'</div>' : '');
+      return '<div class="row'+(c.is_expected?' hit':'')+'">'
+        +'<div class="c-chunk">'+esc(c.chunk_id)+(c.is_expected?' <span class="tag">(correct chunk)</span>':'')+'</div>'
+        +cells+'</div>';
+    }).join('');
+    const orderedBy = hasRerank
+      ? 'by the reranker (hover a column header for what each number means)'
+      : (hasKw ? 'by combined meaning + keyword match (hover a column header for how)' : 'by cosine similarity');
+    const rankText = ret.rank
+      ? ('Ranked #'+ret.rank+' of '+(ret.candidates||[]).length+' chunks pulled, '+orderedBy)
+      : 'Correct chunk not found among the retrieved chunks';
+    return '<p class="dtext">'+rankText+'</p><div class="ctable"><div class="thead"><div class="c-chunk">chunk</div>'+headerCells+'</div>'+rows+'</div>';
   }
   if(ret.kind === 'filters'){
     return '<div class="kv">'+
