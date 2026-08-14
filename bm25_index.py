@@ -69,8 +69,23 @@ class BM25Index:
 def build_bm25_index(chunk_ids, texts):
     """Build time: fit a BM25 index over the given chunk_ids/texts (same
     order, same length) and persist it to output/, so search_documents.py
-    never has to refit it live on every query."""
-    from rank_bm25 import BM25Okapi  # deferred import, same pattern as embedding_backend.py
+    never has to refit it live on every query.
+
+    Loud-never-silent degrade: if rank_bm25 isn't installed, this prints
+    a warning and returns None instead of crashing - the same pattern
+    embedding_backend.py already uses for a missing sentence-transformers.
+    search_documents.py already handles a missing output/bm25_index.pkl
+    by falling back to embedding-only search (see its own header
+    comment), so skipping the build here is a safe, visible degrade,
+    not a silent one."""
+    try:
+        from rank_bm25 import BM25Okapi  # deferred import
+    except ModuleNotFoundError as e:
+        print(f"! rank_bm25 unavailable ({e})")
+        print("! Skipping BM25 keyword index - hybrid search will fall back "
+              "to embedding-only until rank_bm25 is installed and this is "
+              "rebuilt.")
+        return None
 
     if len(chunk_ids) != len(texts):
         raise ValueError(

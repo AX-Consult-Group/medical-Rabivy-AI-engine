@@ -34,7 +34,14 @@ print(f"Indexing {len(narrative_chunks)} narrative chunks for keyword search "
 chunk_ids = [c["chunk_id"] for c in narrative_chunks]
 texts = [c["text"] for c in narrative_chunks]
 
-# STEP 3: Build and persist the index.
-build_bm25_index(chunk_ids, texts)
+# STEP 3: Build and persist the index. None means build_bm25_index()
+# already printed its own warning and skipped (rank_bm25 not installed) -
+# that's an expected, non-fatal outcome here, not this script's job to
+# re-explain, just to exit 0 either way so main.py's pipeline continues.
+index = build_bm25_index(chunk_ids, texts)
 
-print(f"\nDone. Saved output/bm25_index.pkl ({len(chunk_ids)} chunks indexed).")
+if index is None:
+    print("\nSkipped: output/bm25_index.pkl was not created. Install "
+          "rank_bm25 and re-run this step to enable keyword search.")
+else:
+    print(f"\nDone. Saved output/bm25_index.pkl ({len(chunk_ids)} chunks indexed).")

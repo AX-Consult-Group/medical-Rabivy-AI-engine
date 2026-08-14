@@ -41,21 +41,41 @@ STAGES = [
         "script": "4_create_bm25_index.py",
         "check_path": "output/bm25_index.pkl",
         "min_size": 100,
+        # rank_bm25 may not be installed everywhere (e.g. a CI runner
+        # that only installs a light dependency subset). A missing
+        # output here means "keyword search skipped this run" - not a
+        # broken pipeline - since search_documents.py already degrades
+        # to embedding-only search when this file is absent (same
+        # loud-never-silent pattern used for a missing embedding
+        # model). Mandatory stages 1-3 still fail loudly as before.
+        "optional": True,
     },
 ]
 
 
 def _check_output(stage):
     path = stage["check_path"]
+    optional = stage.get("optional", False)
     if not os.path.exists(path):
+        if optional:
+            print(f"!   {stage['script']} exited 0 but '{path}' wasn't "
+                  f"created - this stage is optional and already printed "
+                  f"its own reason above. Continuing without it.")
+            return False
         print(f"!!! {stage['script']} exited 0 but expected output "
               f"'{path}' does not exist. Pipeline stopped.")
         sys.exit(1)
     size = os.path.getsize(path)
     if size < stage["min_size"]:
+        if optional:
+            print(f"!   {stage['script']}'s '{path}' looks suspiciously "
+                  f"small ({size} bytes), but this stage is optional - "
+                  f"continuing.")
+            return False
         print(f"!!! {stage['script']} exited 0 but '{path}' is suspiciously "
               f"small ({size} bytes) - looks empty/malformed. Pipeline stopped.")
         sys.exit(1)
+    return True
 
 
 print("=" * 60)
@@ -92,9 +112,13 @@ for stage in STAGES:
         print(f"\n!!! {script} failed (exit code {result.returncode}). Pipeline stopped.")
         sys.exit(1)
 
-    _check_output(stage)
-    print(f">>> {script} done in {time.time() - start:.1f}s - "
-          f"{stage['check_path']} looks present and non-trivial.")
+    produced_output = _check_output(stage)
+    if produced_output:
+        print(f">>> {script} done in {time.time() - start:.1f}s - "
+              f"{stage['check_path']} looks present and non-trivial.")
+    else:
+        print(f">>> {script} finished in {time.time() - start:.1f}s but "
+              f"skipped its own optional output - see above.")
 
 # ---- Final sanity check: does query_spreadsheet.py's data path still load? ----
 # query_spreadsheet.py isn't part of this rebuild (it's a separate data

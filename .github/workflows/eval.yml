@@ -13,6 +13,14 @@
 # missing package and falls back to the offline TF-IDF/LSA backend, which
 # is exactly what that fallback exists for.
 #
+# rank-bm25 IS installed in CI (unlike sentence-transformers): it's a
+# small, pure-Python package with no torch-style weight, so there's no
+# reason to skip it the way sentence-transformers deliberately is. That
+# also means CI actually exercises the real hybrid BM25+embedding path,
+# not just the embedding-only fallback. (main.py's 4_create_bm25_index.py
+# stage still degrades gracefully to embedding-only if rank-bm25 is ever
+# missing here in the future - see bm25_index.py.)
+#
 # CONSOLIDATED 2026-07-23: this file used to exist as two separate,
 # identically-named workflow files (eval.yml and eval_UPDATED.yml.yml),
 # both auto-running on every push/PR - which is why the Actions tab
@@ -41,7 +49,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install dependencies (CI subset - no torch)
-        run: pip install pandas openpyxl numpy scikit-learn joblib
+        run: pip install pandas openpyxl numpy scikit-learn joblib rank-bm25
 
       - name: Build the knowledge base (chunk -> tag -> embed)
         run: python main.py
