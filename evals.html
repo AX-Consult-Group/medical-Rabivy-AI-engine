@@ -2395,6 +2395,7 @@ background-color: #ffffff;
 <li><a href="#article-retrieval-ranking">Article retrieval ranking</a></li>
 <li><a href="#article-agent-evaluation">Article agent evaluation</a></li>
 </ol>
+<p><strong>Latest re-run: 2026-11-06.</strong> All seven evaluations were re-run against the current code and data, with the live model where the evaluation calls for one. Results match the 2026-08-14 run on every check except two: phrasing consistency passed 10 of 10 anchors (previously 9 of 10), and numeric accuracy passed 4 of 5 (previously 5 of 5, with one new failure described in that section). Each section keeps its earlier runs for comparison, with the newest one labelled.</p>
 <section id="test-the-system---testing-path-a" class="level2">
 <h2 class="anchored" data-anchor-id="test-the-system---testing-path-a">Test the System - testing Path A</h2>
 <p><em>This is Path A’s check - see it in context on the Project Overview page’s <a href="index.html#layer-5---two-question-paths">Layer 5 - Two Question Paths</a>.</em></p>
@@ -2594,11 +2595,29 @@ background-color: #ffffff;
 <ul>
 <li><strong>Q28</strong> - <em>“Which HCPs are in the Southeast region?”</em> - the agent answered correctly, but the check still marked it wrong. All three phrasings correctly refused to answer (Southeast isn’t a real region), with zero tool calls each time - a genuinely correct response. The problem is the check itself: it only accepts 8 specific fixed phrases as proof of a valid refusal (things like “not a real region,” “valid values are”). One rephrasing, <em>“Show me HCPs in the Southeastern US,”</em> refused correctly but worded it differently, so its answer didn’t contain any of those 8 phrases - and got marked FAIL even though it was right. Not a retrieval or routing bug, and not the agent doing anything wrong - the check’s phrase list is just too narrow.</li>
 </ul>
+<p><strong>Update 2026-11-06:</strong> all 10 anchors passed on the re-run, including Q28. The check code hasn’t changed, so the fragility described above still applies: Q28 passing this time depends on the agent’s wording.</p>
 </div>
 </div>
 <section id="final-results-2" class="level3">
 <h3 class="anchored" data-anchor-id="final-results-2">Final Results</h3>
-<p>Real run, after BM25 and reranking, 2026-08-14:</p>
+<p>Latest run, 2026-11-06:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th></th>
+<th>Consistent</th>
+<th>Inconsistent</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Anchors (10 total)</td>
+<td>10</td>
+<td>0</td>
+</tr>
+</tbody>
+</table>
+<p>Previous run, after BM25 and reranking, 2026-08-14:</p>
 <table class="caption-top table">
 <thead>
 <tr class="header">
@@ -2710,12 +2729,50 @@ background-color: #ffffff;
 </div>
 </div>
 <div class="callout-body-container callout-body">
-<p>No issues as of last run.</p>
+<p><strong>Re-run 2026-11-06: 4 of 5 passed.</strong> Question 2 (average propensity score for Florida endocrinologists) failed. The ground-truth mean is 35.48 across 106 HCPs, and the agent answered 0.35, about 100 times too small. The other four operations (percentage, sum, difference, compound) passed. This is a single run of a model whose answers vary, so the failure may not repeat. It has not been diagnosed yet; a second run would show whether it recurs.</p>
 </div>
 </div>
 <section id="final-results-4" class="level3">
 <h3 class="anchored" data-anchor-id="final-results-4">Final Results</h3>
-<p>Real run, 2026-07-29:</p>
+<p>Latest run, 2026-11-06:</p>
+<table class="caption-top table">
+<thead>
+<tr class="header">
+<th>#</th>
+<th>Operation</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>1</td>
+<td>Percentage of a group</td>
+<td>Pass</td>
+</tr>
+<tr class="even">
+<td>2</td>
+<td>Average / mean</td>
+<td>Fail</td>
+</tr>
+<tr class="odd">
+<td>3</td>
+<td>Sum / total</td>
+<td>Pass</td>
+</tr>
+<tr class="even">
+<td>4</td>
+<td>Difference between two groups</td>
+<td>Pass</td>
+</tr>
+<tr class="odd">
+<td>5</td>
+<td>Compound multi-step</td>
+<td>Pass</td>
+</tr>
+</tbody>
+</table>
+<p>4 / 5 on this run.</p>
+<p>Previous run, 2026-07-29:</p>
 <table class="caption-top table">
 <thead>
 <tr class="header">
